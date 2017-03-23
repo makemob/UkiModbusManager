@@ -13,7 +13,6 @@
 # Read yaml config file (select board addresses, baud rate, modbus map etc.)
 # Autoset config (current limits)
 # Command line args
-# EStop all boards if heartbeat to controlling app is lost
 
 
 ##### Libs #####
@@ -42,6 +41,8 @@ BAUD_RATE = 19200
 TIMEOUT = 0.100  # seconds (typical response from Scarab 3ms)
 MAX_RETRIES = 3
 
+INCOMING_MSG_HEARTBEAT_TIMEOUT = 5  # Allowable seconds between incoming UDP messages before estop triggered
+
 # // Modbus states that a baud rate higher than 19200 must use a fixed 750 us
 # // for inter character time out and 1.75 ms for a frame delay.
 # // For baud rates below 19200 the timeing is more critical and has to be calculated.
@@ -55,11 +56,10 @@ MAX_RETRIES = 3
 INTER_FRAME_DELAY = 0.002  # 1.8ms used on Scarab board for 19200 baud, use 2ms as some inaccuracy at both ends..
 
 ENABLED_BOARDS = [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 25, 26]
-#ENABLED_BOARDS = [27] * 22
+# ENABLED_BOARDS = [27] * 22
+# ENABLED_BOARDS = [27]
 
 # MAX_MOTOR_SPEED = 50  # max allowable motor speed %
-
-FULL_READ_MULTIPLE = 10
 
 MB_MAP = {
     'MB_SCARAB_ID1' : 0,
@@ -109,7 +109,7 @@ class UkiModbus:
         # Shadow modbus map, store values when read, use this to check if a write needs to be made
         self.shadow_map = dict([(address, collections.defaultdict(list)) for address in ENABLED_BOARDS])
 
-        self.clear_write_queue()  # INitialises empty write queue
+        self.clear_write_queue()  # Initialises empty write queue
 
         try:
             self.mb_conn = modbus_rtu.RtuMaster(
@@ -200,9 +200,16 @@ def query_and_forward(modbus, output_socket, address, start_offset, end_offset):
     # Flatten to byte string, ship out
     output_socket.sendto(b"".join(packet), (IP_ADDRESS, OUTPUT_UDP_PORT))
 
+def estop_all_boards(modbus):
+    """Queue an estop command to all boards"""
+    modbus.logger.warning("Sending e-stop to all boards")
+    for estop_address in ENABLED_BOARDS:
+        modbus.write_queue[estop_address].append((MB_MAP['MB_ESTOP'], 1))
 
 def process_incoming_packet(modbus, input_socket):
     """Check for incoming UDP packets, parse and store contents in write queue"""
+
+    valid_msg_received = False
 
     while True:
         try:
@@ -231,9 +238,8 @@ def process_incoming_packet(modbus, input_socket):
                         # Catch the only broadcast command we will accept: emergency stop
                         if write_address == 0:
                             if write_offset == MB_MAP['MB_ESTOP']:
-                                modbus.logger.warning("Sending e-stop to all boards")
-                                for estop_address in ENABLED_BOARDS:
-                                    modbus.write_queue[estop_address].append((write_offset, write_value))
+                                estop_all_boards(modbus)
+                                valid_msg_received = True
                             else:
                                 modbus.logger.warning("Invalid broadcast message received")
                         else:
@@ -245,10 +251,13 @@ def process_incoming_packet(modbus, input_socket):
                             #        write_value = MAX_MOTOR_SPEED
 
                             modbus.write_queue[write_address].append((write_offset, write_value))
+                            valid_msg_received = True
 
         except BlockingIOError:
             # This exception means no packets are ready, we can exit the loop
             break
+
+    return valid_msg_received
 
 
 def flush_write_queue(modbus, output_socket):
@@ -315,44 +324,44 @@ def main():
     input_sock.bind((IP_ADDRESS, INPUT_UDP_PORT))
     input_sock.setblocking(False)
 
-    full_read_counter = 0
-    perform_full_read = True
-
     uki = UkiModbus(SERIAL_PORT, BAUD_RATE, TIMEOUT, MAX_RETRIES, INTER_FRAME_DELAY)
+
+    incoming_msg_received = False  # Don't activate heartbeat timeout until one message received
 
     uki.logger.info("UkiModbusManager monitoring addresses " + str(ENABLED_BOARDS))
 
     try:
         while True:
-            # Round robin through all modbus connected boards
-            beginRobinTime = time.time()
-            for address in ENABLED_BOARDS:
+            for full_read_address in ENABLED_BOARDS:
 
-                # Check for incoming messages, cue up writes
-                process_incoming_packet(uki, input_sock)
+                # Round robin through all modbus connected boards
+                beginRobinTime = time.time()
+                for address in ENABLED_BOARDS:
 
-                # High priority reads, do every time
-                query_and_forward(uki, output_sock, address, MB_MAP['MB_ESTOP_STATE'], MB_MAP['MB_OUTWARD_ENDSTOP_STATE'])
+                    # Check for incoming messages, cue up writes
+                    if process_incoming_packet(uki, input_sock):
+                        last_incoming_msg_time = time.time()
+                        incoming_msg_received = True
 
-                # Lower priority reads, do one-in-n
-                if perform_full_read:
-                    query_and_forward(uki, output_sock, address, MB_MAP['MB_BRIDGE_CURRENT'], MB_MAP['MB_BOARD_TEMPERATURE'])
-                    query_and_forward(uki, output_sock, address, MB_MAP['MB_MOTOR_SETPOINT'], MB_MAP['MB_CURRENT_LIMIT_OUTWARD'])
-                    query_and_forward(uki, output_sock, address, MB_MAP['MB_INWARD_ENDSTOP_COUNT'], MB_MAP['MB_HEARTBEAT_EXPIRIES'])
+                    # Check for heartbeat timeout for incoming UDP messages
+                    if incoming_msg_received and (time.time() - last_incoming_msg_time) > INCOMING_MSG_HEARTBEAT_TIMEOUT:
+                        estop_all_boards(uki)
 
-            uki.logger.info("Completed round robin in " + str(time.time() - beginRobinTime) + " seconds")
+                    # High priority reads, do every time
+                    query_and_forward(uki, output_sock, address, MB_MAP['MB_ESTOP_STATE'], MB_MAP['MB_OUTWARD_ENDSTOP_STATE'])
 
-            if full_read_counter <= 0:
-                uki.logger.info("Performing full read")
-                full_read_counter = FULL_READ_MULTIPLE
-                perform_full_read = True
-            else:
-                perform_full_read = False
-                full_read_counter -= 1
+                    # Lower priority reads, do one board per loop
+                    if address == full_read_address:
+                        uki.logger.info("Full read " + str(address))
+                        query_and_forward(uki, output_sock, address, MB_MAP['MB_BRIDGE_CURRENT'], MB_MAP['MB_BOARD_TEMPERATURE'])
+                        query_and_forward(uki, output_sock, address, MB_MAP['MB_MOTOR_SETPOINT'], MB_MAP['MB_CURRENT_LIMIT_OUTWARD'])
+                        query_and_forward(uki, output_sock, address, MB_MAP['MB_INWARD_ENDSTOP_COUNT'], MB_MAP['MB_HEARTBEAT_EXPIRIES'])
 
-            # TODO: Check whether to write config regs, add to write queue
+                uki.logger.info("Completed round robin in " + str(time.time() - beginRobinTime) + " seconds")
 
-            flush_write_queue(uki, output_sock)
+                # TODO: Check whether to write config regs, add to write queue
+
+                flush_write_queue(uki, output_sock)
 
     except KeyboardInterrupt:
         # Clean up
