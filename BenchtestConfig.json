@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "actuators": [
+    {
+      "name": "TestBox",
+      "address": 27,
+      "inwardCurrentLimit": 1500,
+      "outwardCurrentLimit": 1000,
+      "acceleration": 100,
+      "enabled": true
+    }
+  ]
+}
