@@ -41,7 +41,7 @@ LOG_LEVEL = logging.INFO
 
 IP_ADDRESS = "127.0.0.1"
 INPUT_UDP_PORT = 9000
-OUTPUT_UDP_PORT = 9001
+OUTPUT_UDP_PORT = 10001
 
 BAUD_RATE = 19200
 TIMEOUT = 0.100  # seconds (typical response from Scarab 3ms)
@@ -62,7 +62,7 @@ INCOMING_MSG_HEARTBEAT_TIMEOUT = 5  # Allowable seconds between incoming UDP mes
 INTER_FRAME_DELAY = 0.002  # 1.8ms used on Scarab board for 19200 baud, use 2ms as some inaccuracy at both ends..
 
 DEFAULT_CONFIG_FILENAME = 'UkiConfig.json'
-DEFAULT_SERIAL_PORT = 'COM4'
+DEFAULT_SERIAL_PORT = 'COM9'
 # DEFAULT_SERIAL_PORT = '/dev/tty.usbserial-FTYSCI9K'
 # DEFAULT_SERIAL_PORT = '/dev/tty.usbserial-FTZ5B0HX'
 
@@ -193,7 +193,7 @@ class UkiModbusManager(UkiModbus):
 
         # Convert to bytes
         packet = [entry.to_bytes(2, byteorder='little') for entry in packet]
-
+        #self.logger.info(len(packet))
         # Flatten to byte string, ship out
         self.output_socket.sendto(b"".join(packet), (IP_ADDRESS, OUTPUT_UDP_PORT))
 
