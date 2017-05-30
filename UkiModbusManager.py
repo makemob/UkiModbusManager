@@ -63,7 +63,7 @@ INCOMING_MSG_HEARTBEAT_TIMEOUT = 5  # Allowable seconds between incoming UDP mes
 INTER_FRAME_DELAY = 0.002  # 1.8ms used on Scarab board for 19200 baud, use 2ms as some inaccuracy at both ends..
 
 DEFAULT_CONFIG_FILENAME = 'UkiConfig.json'
-DEFAULT_LEFT_SERIAL_PORT = 'COM10'
+DEFAULT_LEFT_SERIAL_PORT = 'COM4'
 DEFAULT_RIGHT_SERIAL_PORT = 'COM9'
 # DEFAULT_SERIAL_PORT = '/dev/tty.usbserial-FTYSCI9K'
 # DEFAULT_SERIAL_PORT = '/dev/tty.usbserial-FTZ5B0HX'
@@ -413,7 +413,7 @@ def main():
                         uki.query_and_forward(address, MB_MAP['MB_INWARD_ENDSTOP_COUNT'], MB_MAP['MB_HEARTBEAT_EXPIRIES'])
                         uki.update_board_config(address)
 
-                uki.logger.debug("Completed round robin in " + str(time.time() - begin_robin_time) + " seconds")
+                uki.logger.info("Completed round robin in " + str(time.time() - begin_robin_time) + " seconds")
 
                 uki.flush_write_queue()
 

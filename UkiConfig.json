@@ -205,7 +205,7 @@
       "inwardCurrentLimit": 1500,
       "outwardCurrentLimit": 1500,
       "acceleration": 95,
-      "enabled": true
+      "enabled": true,
       "port": "Left"
     }
   ]
