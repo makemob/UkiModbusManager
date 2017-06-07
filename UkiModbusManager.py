@@ -63,8 +63,8 @@ INCOMING_MSG_HEARTBEAT_TIMEOUT = 5  # Allowable seconds between incoming UDP mes
 INTER_FRAME_DELAY = 0.002  # 1.8ms used on Scarab board for 19200 baud, use 2ms as some inaccuracy at both ends..
 
 DEFAULT_CONFIG_FILENAME = 'UkiConfig.json'
-DEFAULT_LEFT_SERIAL_PORT = 'COM4'
-DEFAULT_RIGHT_SERIAL_PORT = 'COM9'
+DEFAULT_LEFT_SERIAL_PORT = 'COM4'   # Set to None to disable
+DEFAULT_RIGHT_SERIAL_PORT = 'COM9'  # Set to None to disable
 # DEFAULT_SERIAL_PORT = '/dev/tty.usbserial-FTYSCI9K'
 # DEFAULT_SERIAL_PORT = '/dev/tty.usbserial-FTZ5B0HX'
 
@@ -87,16 +87,23 @@ class UkiModbus:
 
         self.clear_write_queue()  # Initialises empty write queue
 
-        try:
-            self.mb_conn = modbus_rtu.RtuMaster(
-                serial.Serial(port=serial_port, baudrate=baud_rate, bytesize=8, parity='N', stopbits=1, xonxoff=0)
-            )
-            self.mb_conn.set_timeout(timeout)
-            if LOG_LEVEL == logging.DEBUG:
-                self.mb_conn.set_verbose(True)
-            self.logger.info("Modbus port " + serial_port)
-        except modbus_tk.modbus.ModbusError as exc:
-            self.logger.error("%s- Code=%d", exc, exc.get_exception_code())
+        if serial_port is None:
+            self.logger.error ("Serial port disabled")
+            self.enabled = False
+        else:
+            self.enabled = True
+            try:
+                self.mb_conn = modbus_rtu.RtuMaster(
+                    serial.Serial(port=serial_port, baudrate=baud_rate, bytesize=8, parity='N', stopbits=1, xonxoff=0)
+                )
+                self.mb_conn.set_timeout(timeout)
+                if LOG_LEVEL == logging.DEBUG:
+                    self.mb_conn.set_verbose(True)
+                self.logger.info("Modbus port " + serial_port)
+            except modbus_tk.modbus.ModbusError as exc:
+                self.logger.error("%s- Code=%d", exc, exc.get_exception_code())
+
+
 
     def clear_write_queue(self):
         self.write_queue = dict([(address, list()) for address in self.enabled_boards])
@@ -104,23 +111,25 @@ class UkiModbus:
     def access_regs(self, command, address, start_offset, end_offset, write_data = 0):
         """Read multiple holding regs (inclusive), write single holding reg"""
         response = None
-        retry_count = 0
-        while (response == None) and (retry_count < self.retries):
-            try:
-                response = self.mb_conn.execute(address, command, start_offset, end_offset - start_offset + 1, output_value=write_data)
-            except modbus_tk.modbus.ModbusError as exc:
-                self.logger.error("%s- Code=%d", exc, exc.get_exception_code())
-            except modbus_tk.modbus.ModbusInvalidResponseError as exc:
-                retry_count = retry_count + 1
-                self.logger.warning("Invalid response %s, retry %d", exc, retry_count)
-                # raise  # remove to catch all
-                if (retry_count >= self.retries):
-                    self.logger.error("Max retries exceeded for address " + str(address) + ", offsets " + str(start_offset) + " - " + str(end_offset))
-                    # raise # remove to catch all
-            except Exception as exp:
-                self.logger.error(exp)
-                print(exp)
-                raise # remove to catch all
+
+        if self.enabled == True:
+            retry_count = 0
+            while (response == None) and (retry_count < self.retries):
+                try:
+                    response = self.mb_conn.execute(address, command, start_offset, end_offset - start_offset + 1, output_value=write_data)
+                except modbus_tk.modbus.ModbusError as exc:
+                    self.logger.error("%s- Code=%d", exc, exc.get_exception_code())
+                except modbus_tk.modbus.ModbusInvalidResponseError as exc:
+                    retry_count = retry_count + 1
+                    self.logger.warning("Invalid response %s, retry %d", exc, retry_count)
+                    # raise  # remove to catch all
+                    if (retry_count >= self.retries):
+                        self.logger.error("Max retries exceeded for address " + str(address) + ", offsets " + str(start_offset) + " - " + str(end_offset))
+                        # raise # remove to catch all
+                except Exception as exp:
+                    self.logger.error(exp)
+                    print(exp)
+                    raise # remove to catch all
 
         time.sleep(self.interframe_delay)
 
