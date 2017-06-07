@@ -1,0 +1,212 @@
+{
+  "version": 1,
+  "actuators": [
+    {
+      "name": "RightRearHip",
+      "address": 31,
+      "inwardCurrentLimit": 1500,
+      "outwardCurrentLimit": 1500,
+      "acceleration": 95,
+      "enabled": true,
+      "port": "Right"
+    },
+    {
+      "name": "RightRearKnee",
+      "address": 5,
+      "inwardCurrentLimit": 1500,
+      "outwardCurrentLimit": 1500,
+      "acceleration": 95,
+      "enabled": true,
+      "port": "Right"
+    },
+    {
+      "name": "RightRearAnkle",
+      "address": 30,
+      "inwardCurrentLimit": 1500,
+      "outwardCurrentLimit": 1500,
+      "acceleration": 95,
+      "enabled": true,
+      "port": "Right"
+    },
+    {
+      "name": "RightMidHip",
+      "address": 7,
+      "inwardCurrentLimit": 1500,
+      "outwardCurrentLimit": 1500,
+      "acceleration": 95,
+      "enabled": true,
+      "port": "Right"
+    },
+    {
+      "name": "RightMidKnee",
+      "address": 8,
+      "inwardCurrentLimit": 1500,
+      "outwardCurrentLimit": 1500,
+      "acceleration": 95,
+      "enabled": true,
+      "port": "Right"
+    },
+    {
+      "name": "RightMidAnkle",
+      "address": 9,
+      "inwardCurrentLimit": 1500,
+      "outwardCurrentLimit": 1500,
+      "acceleration": 95,
+      "enabled": true,
+      "port": "Right"
+    },
+    {
+      "name": "RightFrontHip",
+      "address": 10,
+      "inwardCurrentLimit": 1500,
+      "outwardCurrentLimit": 1500,
+      "acceleration": 95,
+      "enabled": true,
+      "port": "Right"
+    },
+    {
+      "name": "RightFrontKnee",
+      "address": 11,
+      "inwardCurrentLimit": 1500,
+      "outwardCurrentLimit": 1500,
+      "acceleration": 95,
+      "enabled": true,
+      "port": "Right"
+    },
+    {
+      "name": "RightFrontAnkle",
+      "address": 12,
+      "inwardCurrentLimit": 1500,
+      "outwardCurrentLimit": 1500,
+      "acceleration": 95,
+      "enabled": true,
+      "port": "Right"
+    },
+    {
+      "name": "LeftRearHip",
+      "address": 13,
+      "inwardCurrentLimit": 1500,
+      "outwardCurrentLimit": 1500,
+      "acceleration": 95,
+      "enabled": true,
+      "port": "Right"
+    },
+    {
+      "name": "LeftRearKnee",
+      "address": 14,
+      "inwardCurrentLimit": 1500,
+      "outwardCurrentLimit": 1500,
+      "acceleration": 95,
+      "enabled": true,
+      "port": "Right"
+    },
+    {
+      "name": "LeftRearAnkle",
+      "address": 15,
+      "inwardCurrentLimit": 1500,
+      "outwardCurrentLimit": 1500,
+      "acceleration": 95,
+      "enabled": true,
+      "port": "Right"
+    },
+    {
+      "name": "LeftMidHip",
+      "address": 16,
+      "inwardCurrentLimit": 1500,
+      "outwardCurrentLimit": 1500,
+      "acceleration": 95,
+      "enabled": true,
+      "port": "Right"
+    },
+    {
+      "name": "LeftMidKnee",
+      "address": 17,
+      "inwardCurrentLimit": 1500,
+      "outwardCurrentLimit": 1500,
+      "acceleration": 95,
+      "enabled": true,
+      "port": "Right"
+    },
+    {
+      "name": "LeftMidAnkle",
+      "address": 18,
+      "inwardCurrentLimit": 1500,
+      "outwardCurrentLimit": 1500,
+      "acceleration": 95,
+      "enabled": true,
+      "port": "Right"
+    },
+    {
+      "name": "LeftFrontHip",
+      "address": 19,
+      "inwardCurrentLimit": 1500,
+      "outwardCurrentLimit": 1500,
+      "acceleration": 95,
+      "enabled": true,
+      "port": "Right"
+    },
+    {
+      "name": "LeftFrontKnee",
+      "address": 20,
+      "inwardCurrentLimit": 1500,
+      "outwardCurrentLimit": 1500,
+      "acceleration": 95,
+      "enabled": true,
+      "port": "Right"
+    },
+    {
+      "name": "LeftFrontAnkle", 
+      "address": 21,
+      "inwardCurrentLimit": 1500,
+      "outwardCurrentLimit": 1500,
+      "acceleration": 95,
+      "enabled": true,
+      "port": "Right"
+    },
+    {
+      "name": "RightWingRotate",
+      "address": 25,
+      "inwardCurrentLimit": 1500,
+      "outwardCurrentLimit": 1500,
+      "acceleration": 95,
+      "enabled": true,
+      "port": "Right"
+    },
+    {
+      "name": "RightWingRaise",
+      "address": 26,
+      "inwardCurrentLimit": 1500,
+      "outwardCurrentLimit": 1500,
+      "acceleration": 95,
+      "enabled": true,
+      "port": "Right"
+    },
+    {
+      "name": "LeftWingRotate",
+      "address": 22,
+      "inwardCurrentLimit": 1500,
+      "outwardCurrentLimit": 1500,
+      "acceleration": 95,
+      "enabled": true,
+      "port": "Right"
+    },
+    {
+      "name": "LeftWingRaise",
+      "address": 23,
+      "inwardCurrentLimit": 1500,
+      "outwardCurrentLimit": 1500,
+      "acceleration": 95,
+      "enabled": true,
+      "port": "Right"
+    },
+    {
+      "name": "Arse",
+      "address": 29,
+      "inwardCurrentLimit": 1500,
+      "outwardCurrentLimit": 1500,
+      "acceleration": 95,
+      "enabled": true,
+      "port": "Right"
+    }
+  ]
+}
