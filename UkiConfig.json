@@ -201,6 +201,24 @@
     },
     {
       "name": "Arse",
+      "address": 27,
+      "inwardCurrentLimit": 1500,
+      "outwardCurrentLimit": 1500,
+      "acceleration": 95,
+      "enabled": true,
+      "port": "Right"
+    },
+    {
+      "name": "Pincer1",
+      "address": 28,
+      "inwardCurrentLimit": 1500,
+      "outwardCurrentLimit": 1500,
+      "acceleration": 95,
+      "enabled": true,
+      "port": "Left"
+    },
+    {
+      "name": "Pincer2",
       "address": 29,
       "inwardCurrentLimit": 1500,
       "outwardCurrentLimit": 1500,
