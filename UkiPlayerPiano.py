@@ -28,7 +28,7 @@ output_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)  # Internet, UDP
 DEFAULT_CONFIG_FILENAME = 'UkiConfig.json'
 
 DEFAULT_FRAME_PERIOD = 0.500  # seconds frame duration
-INTER_PACKET_DELAY = 0.010   # seconds between packet transmissions
+INTER_PACKET_DELAY = 0.015   # seconds between packet transmissions
 
 #### Parse command line args
 cmd_line_arg_count = len(sys.argv)
@@ -59,7 +59,8 @@ def send_udp_command(address, offset, value):
     time.sleep(INTER_PACKET_DELAY)
 
 def send_reset_command(address):
-    send_udp_command(address, MB_MAP['MB_RESET_ESTOP'], 0x5050)
+    for reset_count in range(0, 3):
+        send_udp_command(address, MB_MAP['MB_RESET_ESTOP'], 0x5050)
 
 def send_setpoint_command(address, speed, accel):
     send_udp_command(address, MB_MAP['MB_MOTOR_SETPOINT'], speed)
@@ -92,6 +93,13 @@ print("Found board names: " + str(board_names) + "\n")
 
 #### Process CSV
 try:
+
+    # Reset all estop
+    print("Resetting e-stop on all boards...")
+    for board in board_mapping:
+        send_reset_command(board_mapping[board])
+    time.sleep(1)
+
     for loop_count in range(0, loops):
         print("\n* Starting loop " + str(loop_count + 1) + " of " + str(loops) + " *\n")
 
@@ -108,11 +116,6 @@ try:
             except IndexError:
                 print("Error: each column heading must have one underscore eg. LeftRearHip_Speed")
                 sys.exit(3)
-
-            # Reset all estop
-            print("Resetting e-stop on all boards...")
-            for board in board_mapping:
-                send_reset_command(board_mapping[board])
 
             # Loop over each remaining row in CSV
             print("Script running...")
