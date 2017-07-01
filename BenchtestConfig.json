@@ -3,7 +3,7 @@
   "actuators": [
     {
       "name": "TestBox",
-      "address": 30,
+      "address": 24,
       "inwardCurrentLimit": 1500,
       "outwardCurrentLimit": 1000,
       "acceleration": 100,
@@ -16,7 +16,7 @@
       "inwardCurrentLimit": 1500,
       "outwardCurrentLimit": 1000,
       "acceleration": 100,
-      "enabled": true,
+      "enabled": false,
       "port": "Right"
     }
   ]

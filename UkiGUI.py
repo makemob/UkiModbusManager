@@ -15,31 +15,20 @@ from tkinter import *
 import tkinter.scrolledtext as tkst
 import os
 import glob
-import threading
 import queue
-import time
-import UkiModbusManager as uki
-import logging
-import UkiLogger
 
-DEFAULT_CONFIG_FILE = 'UkiConfig.json'
-DEFAULT_LEFT_COMM_PORT = 'COM4' # None
+#DEFAULT_CONFIG_FILE = 'UkiConfig.json'
+DEFAULT_CONFIG_FILE = 'BenchtestConfig.json'
+#DEFAULT_LEFT_COMM_PORT = 'COM4' # None
+DEFAULT_LEFT_COMM_PORT = '/dev/tty.usbserial-A101OCIF'
 DEFAULT_RIGHT_COMM_PORT = 'COM9' # None
 
-MAX_WRAPPER_LOG_ROWS = 100
-LOG_LEVEL = logging.WARNING
-
-# run scripts (player piano)
-# stop script (just use stop all button)
-# legs in (use script)
-# wings down (use script)
-# send out commands to UkiMM (stop, reset)
-# error handling: queue full, invalid config input
+MAX_WRAPPER_LOG_ROWS = 1000
 
 class UkiGUI:
-    def __init__(self, master, gui_queue, wrapper_queue):
+    def __init__(self, master, gui_queue, uki_mm_thread_queue):
         self.master = master
-        self.wrapper_queue = wrapper_queue
+        self.uki_mm_thread_queue = uki_mm_thread_queue
         self.gui_queue = gui_queue
 
         master.title('UKI Articulation')
@@ -144,25 +133,25 @@ class UkiGUI:
             master.columnconfigure(col, weight=1)
 
     def trigger_quit(self):
-        self.wrapper_queue.put('QUIT')
+        self.uki_mm_thread_queue.put('QUIT')
         self.master.quit()
 
     def trigger_script(self):
-        self.wrapper_queue.put('SCRIPT:' + "blahblah.csv")
+        self.uki_mm_thread_queue.put('SCRIPT:' + "blahblah.csv")
 
     def trigger_stop(self):
-        self.wrapper_queue.put('STOP')
+        self.uki_mm_thread_queue.put('STOP')
         self.input_source.set('None')
-        # Send state change to wrapper
+        self.input_changed()
 
     def trigger_reset(self):
-        self.wrapper_queue.put('RESET')
+        self.uki_mm_thread_queue.put('RESET')
 
     def trigger_restart(self):
-        self.wrapper_queue.put('RESTART')
+        self.uki_mm_thread_queue.put('RESTART')
 
     def input_changed(self):
-        self.wrapper_queue.put(self.input_source.get())
+        self.uki_mm_thread_queue.put(self.input_source.get())
         play_state = ACTIVE if self.input_source.get() == 'CSV' else DISABLED
         self.play_button.config(state=play_state)  # grey out play button
 
@@ -195,73 +184,6 @@ class UkiGUI:
                 pass
 
 
-class ThreadManager:
-    def __init__(self, master):
-        self.testing = 0
 
-        self.master = master
-
-        self.running = True
-        self.wrapper_queue = queue.Queue()  # Messages to wrapper
-        self.gui_queue = queue.Queue()  # Messages to GUI
-        self.wrapper_thread = threading.Thread(target=self.wrapper)
-
-        self.gui = UkiGUI(master, self.gui_queue, self.wrapper_queue)
-
-        self.periodic_gui_update()
-
-        self.logger = UkiLogger.get_logger(log_level=LOG_LEVEL, queue=self.gui_queue)
-
-        self.wrapper_thread.start()
-
-    def start_uki_modbus_manager(self):
-        left_port = self.gui.left_comm_port.get() if self.gui.left_comm_disabled.get() == 0 else None
-        right_port = self.gui.right_comm_port.get() if self.gui.right_comm_disabled.get() == 0 else None
-
-        return uki.UkiModbusManager(left_port, right_port, self.gui.config_file.get(), self.logger)
-
-    def wrapper(self):
-
-        uki_manager = self.start_uki_modbus_manager()
-
-        while self.running:
-            # UkiMM checks queue for quit signal, input settings, script triggers
-
-            uki_manager.main_poll_loop()
-
-            while self.wrapper_queue.qsize():
-
-                try:
-                    # Check for messages from GUI to wrapper
-                    msg = self.wrapper_queue.get(0)
-                    print(msg)
-
-                    if msg == 'QUIT':
-                        self.logger.warning('Quitting...')
-                        self.running = False
-                    elif msg == 'RESTART':
-                        self.logger.warning('Restarting UkiModbusManager')
-                        uki_manager.cleanup()
-                        uki_manager = self.start_uki_modbus_manager()
-                    elif msg == 'UDP':
-                        uki_manager.udp_input(True)
-                    elif msg in ('CSV', 'None'):
-                        uki_manager.udp_input(False)
-
-                except queue.Empty:
-                    pass
-
-        uki_manager.cleanup()
-
-
-    def periodic_gui_update(self):
-        self.gui.process_queue()
-        self.master.after(100, self.periodic_gui_update)   # Update GUI with wrapper info every 100ms
-
-
-if __name__ == "__main__":
-    root = Tk()
-    gui = ThreadManager(root)
-    root.mainloop()
 
 

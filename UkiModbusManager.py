@@ -33,6 +33,7 @@ import socket
 import time
 import collections
 import sys
+import queue
 
 import yaml
 
@@ -151,13 +152,15 @@ class UkiModbus:
 
 
 class UkiModbusManager:
-    def __init__(self, left_serial_port, right_serial_port, config_filename, logger=None):
+    def __init__(self, left_serial_port, right_serial_port, config_filename, logger=None, incoming_queue=None):
 
         self.output_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)  # Internet, UDP
 
         self.input_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)  # Internet, UDP
         self.input_socket.bind((IP_ADDRESS, INPUT_UDP_PORT))
         self.input_socket.setblocking(False)
+
+        self.incoming_queue = incoming_queue  # Optional queue to directly send commands to wrapper (rather than UDP)
 
         self.incoming_msg_received = False  # Don't activate heartbeat timeout until one message received
         self.udp_input_enabled = True
@@ -251,6 +254,25 @@ class UkiModbusManager:
         for estop_address in self.enabled_boards:
             self.get_port_for_address(estop_address).write_queue[estop_address].append((MB_MAP['MB_ESTOP'], 1))
 
+    def reset_all_boards(self):
+        """Queue a reset command to all boards"""
+        self.logger.info("Sending reset to all boards")
+        for reset_address in self.enabled_boards:
+            self.get_port_for_address(reset_address).write_queue[reset_address].append((MB_MAP['MB_RESET_ESTOP'], 0x5050))
+
+    def sanity_check_command(self, write_offset, write_value):
+        """Test a command before it is sent out in case it could prove hazardous"""
+        # Cap max motor speed
+        if write_offset == MB_MAP['MB_MOTOR_SETPOINT']:
+            if write_value > MAX_MOTOR_SPEED:
+                self.logger.warning("Motor speed capped at " + str(MAX_MOTOR_SPEED) + "%")
+                write_value = MAX_MOTOR_SPEED
+            elif write_value < -MAX_MOTOR_SPEED:
+                self.logger.warning("Motor speed capped at " + str(-MAX_MOTOR_SPEED) + "%")
+                write_value = -MAX_MOTOR_SPEED
+
+        return (write_offset, write_value)
+
     def process_incoming_packet(self):
         """Check for incoming UDP packets, parse and store contents in write queue"""
 
@@ -292,13 +314,7 @@ class UkiModbusManager:
                                         self.logger.warning("Invalid broadcast message received")
                                 else:
                                     # Catch potentially damaging speed commands
-                                    if write_offset == MB_MAP['MB_MOTOR_SETPOINT']:
-                                        if write_value > MAX_MOTOR_SPEED:
-                                            self.logger.warning("Motor speed capped at " + str(MAX_MOTOR_SPEED) + "%")
-                                            write_value = MAX_MOTOR_SPEED
-                                        elif write_value < -MAX_MOTOR_SPEED:
-                                            self.logger.warning("Motor speed capped at " + str(-MAX_MOTOR_SPEED) + "%")
-                                            write_value = -MAX_MOTOR_SPEED
+                                    (write_offset, write_value) = self.sanity_check_command(write_offset, write_value)
 
                                     self.get_port_for_address(write_address).write_queue[write_address].append((write_offset, write_value))
                                     valid_msg_received = True
@@ -368,6 +384,19 @@ class UkiModbusManager:
         self.uki_ports['left'].clear_write_queue()
         self.uki_ports['right'].clear_write_queue()
 
+    def process_incoming_queue(self):
+        """Check queue for incoming messages (usually used when operating standalone rather than in UDP mode)"""
+        if self.incoming_queue is not None:
+            while self.incoming_queue.qsize():
+                try:
+                    (write_address, write_offset, write_value) = self.incoming_queue.get(0)
+
+                    (write_offset, write_value) = self.sanity_check_command(write_offset, write_value)
+                    self.get_port_for_address(write_address).write_queue[write_address].append((write_offset, write_value))
+                except queue.Empty:
+                    pass
+
+
     def check_and_write_config_reg(self, address, offset, desired_value):
         """Static function to check a reg is set to a desired value, queues write if not"""
         if self.get_port_for_address(address).shadow_map[address][offset] != desired_value:
@@ -405,10 +434,13 @@ class UkiModbusManager:
             begin_robin_time = time.time()
             for address in self.enabled_boards:
 
-                # Check for incoming messages, cue up writes
+                # Check for incoming UDP messages, cue up writes
                 if self.process_incoming_packet():
                     last_incoming_msg_time = time.time()
                     self.incoming_msg_received = True
+
+                # Check for incoming queued direct messages, cue up writes
+                self.process_incoming_queue()
 
                 # Check for heartbeat timeout for incoming UDP messages
                 if self.incoming_msg_received and (time.time() - last_incoming_msg_time) > INCOMING_MSG_HEARTBEAT_TIMEOUT:
