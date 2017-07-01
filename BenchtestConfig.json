@@ -3,11 +3,21 @@
   "actuators": [
     {
       "name": "TestBox",
-      "address": 27,
+      "address": 24,
       "inwardCurrentLimit": 1500,
       "outwardCurrentLimit": 1000,
       "acceleration": 100,
-      "enabled": true
+      "enabled": true,
+      "port": "Left"
+    },
+    {
+      "name": "TestBox2",
+      "address": 31,
+      "inwardCurrentLimit": 1500,
+      "outwardCurrentLimit": 1000,
+      "acceleration": 100,
+      "enabled": false,
+      "port": "Right"
     }
   ]
 }

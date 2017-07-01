@@ -8,7 +8,7 @@
       "outwardCurrentLimit": 1500,
       "acceleration": 95,
       "enabled": true,
-      "port": "Right"
+      "port": "Left"
     },
     {
       "name": "RightRearKnee",
@@ -17,7 +17,7 @@
       "outwardCurrentLimit": 1500,
       "acceleration": 95,
       "enabled": true,
-      "port": "Right"
+      "port": "Left"
     },
     {
       "name": "RightRearAnkle",
@@ -26,7 +26,7 @@
       "outwardCurrentLimit": 1500,
       "acceleration": 95,
       "enabled": true,
-      "port": "Right"
+      "port": "Left"
     },
     {
       "name": "RightMidHip",
@@ -35,7 +35,7 @@
       "outwardCurrentLimit": 1500,
       "acceleration": 95,
       "enabled": true,
-      "port": "Right"
+      "port": "Left"
     },
     {
       "name": "RightMidKnee",
@@ -44,7 +44,7 @@
       "outwardCurrentLimit": 1500,
       "acceleration": 95,
       "enabled": true,
-      "port": "Right"
+      "port": "Left"
     },
     {
       "name": "RightMidAnkle",
@@ -53,7 +53,7 @@
       "outwardCurrentLimit": 1500,
       "acceleration": 95,
       "enabled": true,
-      "port": "Right"
+      "port": "Left"
     },
     {
       "name": "RightFrontHip",
@@ -62,7 +62,7 @@
       "outwardCurrentLimit": 1500,
       "acceleration": 95,
       "enabled": true,
-      "port": "Right"
+      "port": "Left"
     },
     {
       "name": "RightFrontKnee",
@@ -71,7 +71,7 @@
       "outwardCurrentLimit": 1500,
       "acceleration": 95,
       "enabled": true,
-      "port": "Right"
+      "port": "Left"
     },
     {
       "name": "RightFrontAnkle",
@@ -80,7 +80,7 @@
       "outwardCurrentLimit": 1500,
       "acceleration": 95,
       "enabled": true,
-      "port": "Right"
+      "port": "Left"
     },
     {
       "name": "LeftRearHip",
@@ -170,7 +170,7 @@
       "outwardCurrentLimit": 1500,
       "acceleration": 95,
       "enabled": true,
-      "port": "Right"
+      "port": "Left"
     },
     {
       "name": "RightWingRaise",
@@ -179,7 +179,7 @@
       "outwardCurrentLimit": 1500,
       "acceleration": 95,
       "enabled": true,
-      "port": "Right"
+      "port": "Left"
     },
     {
       "name": "LeftWingRotate",
@@ -201,24 +201,6 @@
     },
     {
       "name": "Arse",
-      "address": 27,
-      "inwardCurrentLimit": 1500,
-      "outwardCurrentLimit": 1500,
-      "acceleration": 95,
-      "enabled": true,
-      "port": "Right"
-    },
-    {
-      "name": "Pincer1",
-      "address": 28,
-      "inwardCurrentLimit": 1500,
-      "outwardCurrentLimit": 1500,
-      "acceleration": 95,
-      "enabled": true,
-      "port": "Left"
-    },
-    {
-      "name": "Pincer2",
       "address": 29,
       "inwardCurrentLimit": 1500,
       "outwardCurrentLimit": 1500,
