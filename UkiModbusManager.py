@@ -18,6 +18,7 @@
 # Read more settings from yaml config file (baud rate, UDP ports etc.)
 # Allow boards to be enabled/disabled on the fly
 # Deal with left/right better, inherit UkiModbus and override read/write etc.?
+# Single logger to avoid startup echo
 
 
 ##### Libs #####
@@ -65,8 +66,6 @@ INTER_FRAME_DELAY = 0.002  # 1.8ms used on Scarab board for 19200 baud, use 2ms 
 DEFAULT_CONFIG_FILENAME = 'UkiConfig.json'
 DEFAULT_LEFT_SERIAL_PORT = 'COM4'   # Set to None to disable
 DEFAULT_RIGHT_SERIAL_PORT = 'COM9'  # Set to None to disable
-# DEFAULT_SERIAL_PORT = '/dev/tty.usbserial-FTYSCI9K'
-# DEFAULT_SERIAL_PORT = '/dev/tty.usbserial-FTZ5B0HX'
 
 SEND_EVERY_WRITE = False  # Debug mode to send a write every loop, regardless of whether reg already holds that value
 
@@ -75,8 +74,11 @@ MAX_MOTOR_SPEED = 60  # max allowable motor speed %
 
 class UkiModbus:
 
-    def __init__(self, serial_port, baud_rate, timeout, max_retries, interframe_delay, enabled_boards):
-        self.logger = modbus_tk.utils.create_logger("console", level=LOG_LEVEL)
+    def __init__(self, serial_port, baud_rate, timeout, max_retries, interframe_delay, enabled_boards, logger=None):
+        if logger is None:
+            self.logger = modbus_tk.utils.create_logger("console", level=LOG_LEVEL)
+        else:
+            self.logger = logger
 
         self.retries = max_retries
         self.interframe_delay = interframe_delay
@@ -87,11 +89,11 @@ class UkiModbus:
 
         self.clear_write_queue()  # Initialises empty write queue
 
+        self.enabled = False
+
         if serial_port is None:
-            self.logger.error ("Serial port disabled")
-            self.enabled = False
+            self.logger.error("Serial port disabled")
         else:
-            self.enabled = True
             try:
                 self.mb_conn = modbus_rtu.RtuMaster(
                     serial.Serial(port=serial_port, baudrate=baud_rate, bytesize=8, parity='N', stopbits=1, xonxoff=0)
@@ -100,8 +102,11 @@ class UkiModbus:
                 if LOG_LEVEL == logging.DEBUG:
                     self.mb_conn.set_verbose(True)
                 self.logger.info("Modbus port " + serial_port)
+                self.enabled = True
             except modbus_tk.modbus.ModbusError as exc:
                 self.logger.error("%s- Code=%d", exc, exc.get_exception_code())
+            except serial.serialutil.SerialException as exc:
+                self.logger.error(exc)
 
 
 
@@ -141,16 +146,22 @@ class UkiModbus:
 
     def write_reg(self, address, offset, value):
         """Write single holding reg"""
-        return (self.access_regs(cst.WRITE_SINGLE_REGISTER, address, offset, offset, write_data=value))
+        return(self.access_regs(cst.WRITE_SINGLE_REGISTER, address, offset, offset, write_data=value))
 
 
 
 class UkiModbusManager:
-    def __init__(self, left_serial_port, right_serial_port, baud_rate, timeout, max_retries, interframe_delay,
-                 input_socket, output_socket,
-                 config_filename):
-        self.input_socket = input_socket
-        self.output_socket = output_socket
+    def __init__(self, left_serial_port, right_serial_port, config_filename, logger=None):
+
+        self.output_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)  # Internet, UDP
+
+        self.input_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)  # Internet, UDP
+        self.input_socket.bind((IP_ADDRESS, INPUT_UDP_PORT))
+        self.input_socket.setblocking(False)
+
+        self.incoming_msg_received = False  # Don't activate heartbeat timeout until one message received
+        self.udp_input_enabled = True
+
         self.config_filename = config_filename
         self.board_config = {'actuators': []}
         self.read_board_config_file()
@@ -165,10 +176,17 @@ class UkiModbusManager:
                 elif actuator['port'] == "Right":
                     right_boards.append(actuator['address'])
 
-        self.uki_ports = {'left': UkiModbus(left_serial_port, baud_rate, timeout, max_retries, interframe_delay, left_boards),
-                          'right': UkiModbus(right_serial_port, baud_rate, timeout, max_retries, interframe_delay, right_boards)}
+        self.uki_ports = {'left': UkiModbus(left_serial_port, BAUD_RATE, TIMEOUT, MAX_RETRIES, INTER_FRAME_DELAY,
+                                            left_boards, logger),
+                          'right': UkiModbus(right_serial_port, BAUD_RATE, TIMEOUT, MAX_RETRIES, INTER_FRAME_DELAY,
+                                             right_boards, logger)}
 
-        self.logger = self.uki_ports['left'].logger  # hijack left-side logger
+        if logger is None:
+            self.logger = self.uki_ports['left'].logger  # hijack left-side logger
+        else:
+            self.logger = logger
+
+        self.logger.info("UkiModbusManager monitoring addresses " + str(self.enabled_boards))
 
     def read_board_config_file(self):
         """Read in YAML config file"""
@@ -196,7 +214,7 @@ class UkiModbusManager:
 
         regs = self.get_port_for_address(address).read_regs(address, start_offset, end_offset)
 
-        if (regs != None):
+        if regs != None:
             # Prepare packet, interleaving reg offset and reg value (effectively key-value pairs)
             # First two bytes are the modbus address
             packet = [address]
@@ -244,45 +262,48 @@ class UkiModbusManager:
 
                 self.logger.debug("Received" + str(len(incoming_packet)) + "bytes via UDP")
 
-                if ((len(incoming_packet) % 2) != 0):
-                    self.logger.error("Received incorrectly formatted UDP packet", str(incoming_packet))
-                    # No UDP response for malformed packets
-                else:
-                    self.logger.debug(incoming_packet)
-
-                    # Extract write address (first two bytes)
-                    write_address = int.from_bytes(incoming_packet[0:2], byteorder='little', signed=False)
-
-                    if write_address not in self.enabled_boards + [0]:
-                        self.logger.warning("Received message for board that is not enabled: " + str(write_address))
+                if self.udp_input_enabled:
+                    if (len(incoming_packet) % 2) != 0:
+                        self.logger.error("Received incorrectly formatted UDP packet", str(incoming_packet))
+                        # No UDP response for malformed packets
                     else:
-                        # Step through the rest of the packet four bytes at a time (ie. break down into offset/value pairs)
-                        for pos in range(2, len(incoming_packet), 4):
-                            write_offset = int.from_bytes(incoming_packet[pos:(pos + 2)], byteorder='little', signed=False)
-                            write_value = int.from_bytes(incoming_packet[(pos + 2):(pos + 4)], byteorder='little',
-                                                         signed=True)
-                            #write_value_signed = int.from_bytes(incoming_packet[(pos + 2):(pos + 4)], byteorder='little',
-                            #                             signed=True)
+                        self.logger.debug(incoming_packet)
 
-                            # Catch the only broadcast command we will accept: emergency stop
-                            if write_address == 0:
-                                if write_offset == MB_MAP['MB_ESTOP']:
-                                    self.estop_all_boards(self)
-                                    valid_msg_received = True
+                        # Extract write address (first two bytes)
+                        write_address = int.from_bytes(incoming_packet[0:2], byteorder='little', signed=False)
+
+                        if write_address not in self.enabled_boards + [0]:
+                            self.logger.warning("Received message for board that is not enabled: " + str(write_address))
+                        else:
+                            # Step through the rest of the packet four bytes at a time (ie. break down into offset/value pairs)
+                            for pos in range(2, len(incoming_packet), 4):
+                                write_offset = int.from_bytes(incoming_packet[pos:(pos + 2)], byteorder='little', signed=False)
+                                write_value = int.from_bytes(incoming_packet[(pos + 2):(pos + 4)], byteorder='little',
+                                                             signed=True)
+                                #write_value_signed = int.from_bytes(incoming_packet[(pos + 2):(pos + 4)], byteorder='little',
+                                #                             signed=True)
+
+                                # Catch the only broadcast command we will accept: emergency stop
+                                if write_address == 0:
+                                    if write_offset == MB_MAP['MB_ESTOP']:
+                                        self.estop_all_boards(self)
+                                        valid_msg_received = True
+                                    else:
+                                        self.logger.warning("Invalid broadcast message received")
                                 else:
-                                    self.logger.warning("Invalid broadcast message received")
-                            else:
-                                # Catch potentially damaging speed commands
-                                if write_offset == MB_MAP['MB_MOTOR_SETPOINT']:
-                                    if write_value > MAX_MOTOR_SPEED:
-                                        self.logger.warning("Motor speed capped at " + str(MAX_MOTOR_SPEED) + "%")
-                                        write_value = MAX_MOTOR_SPEED
-                                    elif write_value < -MAX_MOTOR_SPEED:
-                                        self.logger.warning("Motor speed capped at " + str(-MAX_MOTOR_SPEED) + "%")
-                                        write_value = -MAX_MOTOR_SPEED
+                                    # Catch potentially damaging speed commands
+                                    if write_offset == MB_MAP['MB_MOTOR_SETPOINT']:
+                                        if write_value > MAX_MOTOR_SPEED:
+                                            self.logger.warning("Motor speed capped at " + str(MAX_MOTOR_SPEED) + "%")
+                                            write_value = MAX_MOTOR_SPEED
+                                        elif write_value < -MAX_MOTOR_SPEED:
+                                            self.logger.warning("Motor speed capped at " + str(-MAX_MOTOR_SPEED) + "%")
+                                            write_value = -MAX_MOTOR_SPEED
 
-                                self.get_port_for_address(write_address).write_queue[write_address].append((write_offset, write_value))
-                                valid_msg_received = True
+                                    self.get_port_for_address(write_address).write_queue[write_address].append((write_offset, write_value))
+                                    valid_msg_received = True
+                else:
+                    self.logger.debug("Dropped packet (UDP disabled)")
 
             except BlockingIOError:
                 # This exception means no packets are ready, we can exit the loop
@@ -290,6 +311,9 @@ class UkiModbusManager:
 
         return valid_msg_received
 
+    def udp_input(self, enabled):
+        self.udp_input_enabled = enabled
+        self.logger.warning("UDP input set to " + str(enabled))
 
     def flush_write_queue(self):
         """Send out any writes waiting in the queue, ignoring those which have been superseded by a more recent message"""
@@ -368,72 +392,69 @@ class UkiModbusManager:
         self.check_and_write_config_reg(address, MB_MAP['MB_CURRENT_LIMIT_OUTWARD'], board_config['outwardCurrentLimit'])
         self.check_and_write_config_reg(address, MB_MAP['MB_MOTOR_ACCEL'], board_config['acceleration'])
 
+    def main_poll_loop(self):
+        """
+        Main loop for UkiModbusManager
+        """
+        # Reread config file each full round robin in case it has been edited
+        self.read_board_config_file()
 
-def main():
-    """Main loop"""
+        for full_read_address in self.enabled_boards:
 
-    # Parse command line args (python3 UkiModbusManager <config file name> <serial port>)
+            # Round robin through all modbus connected boards
+            begin_robin_time = time.time()
+            for address in self.enabled_boards:
+
+                # Check for incoming messages, cue up writes
+                if self.process_incoming_packet():
+                    last_incoming_msg_time = time.time()
+                    self.incoming_msg_received = True
+
+                # Check for heartbeat timeout for incoming UDP messages
+                if self.incoming_msg_received and (time.time() - last_incoming_msg_time) > INCOMING_MSG_HEARTBEAT_TIMEOUT:
+                    self.estop_all_boards()
+
+                # High priority reads, do every time
+                self.query_and_forward(address, MB_MAP['MB_ESTOP_STATE'], MB_MAP['MB_OUTWARD_ENDSTOP_STATE'])
+
+                # Lower priority reads, do one board per loop
+                if address == full_read_address:
+                    self.logger.debug("Full read " + str(address))
+                    self.query_and_forward(address, MB_MAP['MB_BRIDGE_CURRENT'], MB_MAP['MB_BOARD_TEMPERATURE'])
+                    self.query_and_forward(address, MB_MAP['MB_MOTOR_SETPOINT'], MB_MAP['MB_CURRENT_LIMIT_OUTWARD'])
+                    self.query_and_forward(address, MB_MAP['MB_INWARD_ENDSTOP_COUNT'], MB_MAP['MB_HEARTBEAT_EXPIRIES'])
+                    self.update_board_config(address)
+
+            self.logger.info("Completed round robin in " + str(time.time() - begin_robin_time) + " seconds")
+
+            self.flush_write_queue()
+
+    def cleanup(self):
+        """
+        Shutdown UkiModbusManager object
+        Probably better to do this with a __enter__, __exit__, with setup
+        """
+        self.output_socket.close()
+        self.input_socket.close()
+        self.logger.info("Exiting")
+
+
+if __name__ == "__main__":
+
+    # Parse command line args (python3 UkiModbusManager <config file name> <left_serial port> <right_serial port>)
     cmd_line_arg_count = len(sys.argv)
     config_file_name = sys.argv[1] if cmd_line_arg_count > 1 else DEFAULT_CONFIG_FILENAME
     left_serial_port = sys.argv[2] if cmd_line_arg_count > 2 else DEFAULT_LEFT_SERIAL_PORT
     right_serial_port = sys.argv[3] if cmd_line_arg_count > 3 else DEFAULT_RIGHT_SERIAL_PORT
 
-    output_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)  # Internet, UDP
-
-    input_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)  # Internet, UDP
-    input_sock.bind((IP_ADDRESS, INPUT_UDP_PORT))
-    input_sock.setblocking(False)
-
-    uki = UkiModbusManager(left_serial_port, right_serial_port, BAUD_RATE, TIMEOUT, MAX_RETRIES, INTER_FRAME_DELAY,
-                           input_sock, output_sock, config_file_name)
-
-    incoming_msg_received = False  # Don't activate heartbeat timeout until one message received
-
-    uki.logger.info("UkiModbusManager monitoring addresses " + str(uki.enabled_boards))
+    uki = UkiModbusManager(left_serial_port, right_serial_port, config_file_name)
 
     try:
         while True:
-            # Reread config file each full round robin in case it has been edited
-            uki.read_board_config_file()
-
-            for full_read_address in uki.enabled_boards:
-
-                # Round robin through all modbus connected boards
-                begin_robin_time = time.time()
-                for address in uki.enabled_boards:
-
-                    # Check for incoming messages, cue up writes
-                    if uki.process_incoming_packet():
-                        last_incoming_msg_time = time.time()
-                        incoming_msg_received = True
-
-                    # Check for heartbeat timeout for incoming UDP messages
-                    if incoming_msg_received and (time.time() - last_incoming_msg_time) > INCOMING_MSG_HEARTBEAT_TIMEOUT:
-                        uki.estop_all_boards()
-
-                    # High priority reads, do every time
-                    uki.query_and_forward(address, MB_MAP['MB_ESTOP_STATE'], MB_MAP['MB_OUTWARD_ENDSTOP_STATE'])
-
-                    # Lower priority reads, do one board per loop
-                    if address == full_read_address:
-                        uki.logger.debug("Full read " + str(address))
-                        uki.query_and_forward(address, MB_MAP['MB_BRIDGE_CURRENT'], MB_MAP['MB_BOARD_TEMPERATURE'])
-                        uki.query_and_forward(address, MB_MAP['MB_MOTOR_SETPOINT'], MB_MAP['MB_CURRENT_LIMIT_OUTWARD'])
-                        uki.query_and_forward(address, MB_MAP['MB_INWARD_ENDSTOP_COUNT'], MB_MAP['MB_HEARTBEAT_EXPIRIES'])
-                        uki.update_board_config(address)
-
-                uki.logger.info("Completed round robin in " + str(time.time() - begin_robin_time) + " seconds")
-
-                uki.flush_write_queue()
+            uki.main_poll_loop()
 
     except KeyboardInterrupt:
-        # Clean up
-        output_sock.close()
-        input_sock.close()
-        uki.logger.info("Exiting")
+        uki.cleanup()
         sys.exit(0)
 
 
-
-if __name__ == "__main__":
-    main()
