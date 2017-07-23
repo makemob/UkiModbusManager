@@ -164,6 +164,8 @@ class UkiModbusManager:
         self.incoming_queue = incoming_queue  # Optional queue to directly send commands to wrapper (rather than UDP)
         self.outgoing_queue = outgoing_queue  # Optional queue to directly send responses from boards (rather than UDP)
 
+        self.honour_accel_config = True   # Whether or not we honour the accel settings in config file
+
         self.incoming_msg_received = False  # Don't activate heartbeat timeout until one message received
         self.last_incoming_msg_time = time.time()
         self.udp_input_enabled = True
@@ -344,6 +346,9 @@ class UkiModbusManager:
         self.udp_input_enabled = enabled
         self.logger.warning("UDP input set to " + str(enabled))
 
+    def set_accel_config(self, enabled):
+        self.honour_accel_config = enabled
+
     def flush_write_queue(self):
         """Send out any writes waiting in the queue, ignoring those which have been superseded by a more recent message"""
 
@@ -369,10 +374,10 @@ class UkiModbusManager:
                     if SEND_EVERY_WRITE or write_value != self.get_port_for_address(write_address).shadow_map[write_address][write_offset]:
                         response = self.get_port_for_address(write_address).write_reg(write_address, write_offset, write_value)
 
-                        self.logger.info("Write reg: addr = " + str(write_address) +
+                        self.logger.debug("Write reg: addr = " + str(write_address) +
                                             "  offset = " + str(write_offset) +
                                             "  value = " + str(write_value))
-                        self.logger.info("Write response: " + str(response))
+                        self.logger.debug("Write response: " + str(response))
 
                         # Send a response to output UDP socket for each reg separately
                         if (response != None):
@@ -434,7 +439,8 @@ class UkiModbusManager:
         # Update regs as needed
         self.check_and_write_config_reg(address, MB_MAP['MB_CURRENT_LIMIT_INWARD'], board_config['inwardCurrentLimit'])
         self.check_and_write_config_reg(address, MB_MAP['MB_CURRENT_LIMIT_OUTWARD'], board_config['outwardCurrentLimit'])
-        self.check_and_write_config_reg(address, MB_MAP['MB_MOTOR_ACCEL'], board_config['acceleration'])
+        if self.honour_accel_config:
+            self.check_and_write_config_reg(address, MB_MAP['MB_MOTOR_ACCEL'], board_config['acceleration'])
 
     def main_poll_loop(self):
         """

@@ -17,11 +17,13 @@ import os
 import glob
 import queue
 
-#DEFAULT_CONFIG_FILE = 'UkiConfig.json'
-DEFAULT_CONFIG_FILE = 'BenchtestConfig.json'
-#DEFAULT_LEFT_COMM_PORT = 'COM4' # None
-DEFAULT_LEFT_COMM_PORT = '/dev/tty.usbserial-A101OCIF'
-DEFAULT_RIGHT_COMM_PORT = None #'COM9' # None
+DEFAULT_CONFIG_FILE = 'UkiConfig.json'
+#DEFAULT_CONFIG_FILE = 'BenchtestConfig.json'
+DEFAULT_LEFT_COMM_PORT = 'COM4' # None
+#DEFAULT_LEFT_COMM_PORT = '/dev/tty.usbserial-A101OCIF'
+DEFAULT_RIGHT_COMM_PORT = 'COM9' # None
+
+DEFAULT_LOG_LEVEL = 'INFO'
 
 DEFAULT_PIANO_LOOPS = 1
 DEFAULT_PIANO_RATE = 0.5  # seconds
@@ -139,6 +141,15 @@ class UkiGUI:
 
         self.play_button = Button(master, text='Run Script', command=self.trigger_script, state=DISABLED)
         self.play_button.grid(row=row_num, column=4)
+        row_num += 1
+
+        # Set log level
+        self.log_level_label = Label(master, text='Log Level:')
+        self.log_level_label.grid(row=row_num, column=0, sticky='NW')
+        self.log_level = StringVar()
+        self.log_level.set(DEFAULT_LOG_LEVEL)
+        self.log_level_option = OptionMenu(master, self.log_level, 'ERROR', 'WARNING', 'INFO', 'DEBUG')
+        self.log_level_option.grid(row=row_num, column=1, columnspan=3, sticky='EW')
 
         # Wrapper debug out
         self.wrapper_label = Label(master, text='Log:')
@@ -166,7 +177,8 @@ class UkiGUI:
                'config_file': self.config_file.get(),
                'script_file': script_file, #self.files_listbox.get(self.files_listbox.curselection()),
                'script_loops': self.piano_loops.get(),
-               'script_rate': self.piano_rate.get()}
+               'script_rate': self.piano_rate.get(),
+               'log_level': self.log_level.get()}
 
         # Send dict with config & message to queue
         queue_obj = {'config': cfg, 'message': msg}

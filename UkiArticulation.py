@@ -23,24 +23,22 @@ import yaml
 import csv
 from ModbusMap import MB_MAP
 
-LOG_LEVEL = logging.INFO
+INITIAL_LOG_LEVEL = logging.INFO
+LOG_LEVEL_MAP = {'ERROR': logging.ERROR,
+                 'WARNING': logging.WARN,
+                 'INFO': logging.INFO,
+                 'DEBUG': logging.DEBUG}
 
 RESET_LOOPS = 3  # Number of times to reset boards prior to running script
+THREAD_DELAY = 0.1  # Seconds to delay when avoiding thread spinning.  Sets GUI update rate
 
-# rework player piano to states, not 'playing'
-# stop script if any current limit detected
+# log level selection not working
 # error handling: queue full, invalid config input
 # heartbeat
 # test speed cap
-# instead of self.playing start/stop player thread? messy as-is
 # move player piano into separate file
-# multiple logger queues
-# set log level on the fly
-
-# stop script (just use stop all button)
-# legs in (use script)
-# wings down (use script)
-
+# multiple logger queues, threads currently access logger directly
+# 'estop detected' warning doesn't appear
 
 class ThreadManager:
     def __init__(self, master):
@@ -66,7 +64,8 @@ class ThreadManager:
         self.gui = UkiGUI(master, self.gui_queue, self.uki_mm_thread_queue)
         self.periodic_gui_update()
 
-        self.logger = UkiLogger.get_logger(log_level=LOG_LEVEL, queue=self.gui_queue)
+        self.log_level = INITIAL_LOG_LEVEL
+        self.logger = UkiLogger.get_logger(log_level=self.log_level, queue=self.gui_queue)
 
         self.uki_mm_thread.start()
         self.uki_mm_comms_thread.start()
@@ -100,6 +99,11 @@ class ThreadManager:
                         self.gui_config = gui_config  # Export for other threads to use
                     msg = queue_obj['message']
 
+                    if LOG_LEVEL_MAP[gui_config['log_level']] != self.log_level:
+                        self.log_level = LOG_LEVEL_MAP[gui_config['log_level']]
+                        self.logger.info("Log level changed to " + gui_config['log_level'])
+                        self.logger.setLevel(LOG_LEVEL_MAP[gui_config['log_level']])
+
                     if not uki_mm_started:
                         # Only start Uki MM once we have config data from the GUI
                         uki_manager = self.start_uki_modbus_manager(gui_config)
@@ -115,8 +119,10 @@ class ThreadManager:
                         uki_manager = self.start_uki_modbus_manager(gui_config)
                     elif msg == 'UDP':
                         uki_manager.udp_input(True)
+                        uki_manager.set_accel_config(True)      # Allow config file to set accel
                     elif msg in ('CSV', 'None'):
                         uki_manager.udp_input(False)
+                        uki_manager.set_accel_config(False)  # Script will set accel values
                     elif msg == 'STOP':
                         uki_manager.estop_all_boards()
                         self.playing = False
@@ -129,6 +135,7 @@ class ThreadManager:
                     pass
 
             # Check for messages coming in from boards eg. EStop state
+            last_estopped_boards = estopped_boards
             while self.uki_mm_responses_queue.qsize():
                 try:
                     response = self.uki_mm_responses_queue.get(0)
@@ -149,28 +156,29 @@ class ThreadManager:
             for board_address, board_estop_state in estopped_boards.items():
                 if board_estop_state:
                     estop_active = True
-            self.fault_active = estop_active  # Transfer once value determined to keep atomic behaviour
-            if estop_active:
+            self.fault_active = estop_active  # Transfer only once value determined, can't glitch through False
+            if estop_active and last_estopped_boards != estopped_boards:
                 self.logger.warning("EStop detected: " + str(estopped_boards))
 
         uki_manager.cleanup()
 
     def uki_send_comms(self, address, offset, value):
         if self.playing:
-            self.logger.info('Add ' + str(address) + '  offset ' + str(offset) + '=' + str(value))
+            self.logger.debug('Address ' + str(address) + ', offset ' + str(offset) + '=' + str(value))
             self.uki_mm_comms_queue.put((address, offset, value))
 
     def uki_player_piano(self):
-        #piano_states = {'IDLE': 0, 'INIT': 1, 'RESET_ESTOP': 2, 'ROLLING': 3, 'STOPPING': 4}
-        #piano_state = piano_states['IDLE']
-        loops = 0
+        piano_states = {'IDLE': 0, 'INIT': 1, 'RESET_ESTOP': 2, 'ROLLING': 3, 'STOPPING': 4}
+        piano_state = piano_states['IDLE']
 
         while self.running:
-            board_names = []
-            board_mapping = {}
-            current_speed = {}
-            current_accel = {}
-            if self.playing:
+            if piano_state == piano_states['IDLE']:
+                if self.playing:
+                    piano_state = piano_states['INIT']
+                else:
+                    time.sleep(THREAD_DELAY)  # Slow poll loop until we start again
+
+            elif piano_state == piano_states['INIT']:
                 # Fetch gui config (locked)
                 with self.gui_config_lock:
                     csv_filename = self.gui_config['script_file']
@@ -198,92 +206,114 @@ class ThreadManager:
                     self.logger.error('Failed to parse yaml config file ' + config_file + ': ' + str(exc))
                     self.playing = False
 
-            # Reset estop
-            if self.playing:
-                # Reset a few times just in case of downstream errors
+                if self.playing:
+                    piano_state = piano_states['RESET_ESTOP']
+                else:
+                    piano_state = piano_states['IDLE']
+
+            elif piano_state == piano_states['RESET_ESTOP']:
+                # Reset estop a few times just in case of downstream errors
                 for reset_loops in range(0, RESET_LOOPS):
-                    self.logger.info("Resetting all boards: " + str(reset_loops + 1) + " of " + str(RESET_LOOPS))
+                    self.logger.info("Resetting all boards: " + str(reset_loops + 1) + " of " + str(RESET_LOOPS) + " attempts")
                     for board in board_names:
                         self.uki_send_comms(address=board_mapping[board],
                                             offset=MB_MAP['MB_RESET_ESTOP'],
                                             value=0x5050)
                     time.sleep(2)  # Wait for reset messages to go out
-            else:
-                time.sleep(0.1)  # Slow poll loop until we start again
 
-            for loop_count in range(0, loops):
-                if not self.playing:
-                    break
+                if self.playing:
+                    loop_count = 0
+                    piano_state = piano_states['ROLLING']
+                else:
+                    piano_state = piano_states['IDLE']
 
+            elif piano_state == piano_states['ROLLING']:
                 self.logger.info('Starting loop ' + str(loop_count + 1) + ' of ' + str(loops) + ': ' + csv_filename)
 
-                with open(csv_filename, newline='') as csv_file:
-                    csv_reader = csv.reader(csv_file, delimiter=',', quotechar='"')
+                if not os.path.isfile(csv_filename):
+                    self.logger.error('Script file not found:' + csv_filename)
+                    self.playing = False
+                else:
+                    with open(csv_filename, newline='') as csv_file:
+                        csv_reader = csv.reader(csv_file, delimiter=',', quotechar='"')
 
-                    # Read header row
-                    header = next(csv_reader)
-                    try:
-                        actuator_names_by_col = [cell.split('_')[0] for cell in header]
-                        speed_accel = [cell.split('_')[1] for cell in header]
-                    except IndexError:
-                        self.logger.error('Each CSV column heading must have one underscore eg. LeftRearHip_Speed')
+                        # Read header row
+                        header = next(csv_reader)
+                        try:
+                            actuator_names_by_col = [cell.split('_')[0] for cell in header]
+                            speed_accel = [cell.split('_')[1] for cell in header]
+                        except IndexError:
+                            self.logger.error('Each CSV column heading must have one underscore eg. LeftRearHip_Speed')
+                            self.playing = False
+
+                        # Loop over each remaining row in CSV
+                        frame_number = 1
+                        for row in csv_reader:
+                            # Any estopped board will stop the script
+                            if self.fault_active:
+                                self.logger.warning("Stopping script, estop detected")
+                                self.playing = False
+
+                            if not self.playing:
+                                break
+
+                            self.logger.debug('Frame ' + str(frame_number) + ' (row ' + str(frame_number + 1) + ')')
+                            frame_number += 1
+
+                            # Check for invalid row, too long/short
+
+                            # Loop over each cell in the row, process non-blank entries
+                            for cell_index in range(0, len(row)):
+                                if row[cell_index] != '':
+                                    if speed_accel[cell_index] == 'Speed':
+                                        self.logger.info(actuator_names_by_col[cell_index] + ' speed set to ' + row[cell_index])
+                                        current_speed[actuator_names_by_col[cell_index]] = int(row[cell_index])
+                                    elif speed_accel[cell_index] == 'Accel':
+                                        self.logger.info(actuator_names_by_col[cell_index] + ' accel set to ' + row[cell_index])
+                                        current_accel[actuator_names_by_col[cell_index]] = int(row[cell_index])
+                                    else:
+                                        self.logger.warning('Invalid column name, does not contain "_Speed" or "_Accel"' +
+                                                            header[cell_index])
+                                        # Don't exit, need to fall thru to force stop
+
+                            for board in board_names:
+                                # Range check inputs, warn?
+
+                                # Just for now always update every board, every frame
+                                self.uki_send_comms(address=board_mapping[board],
+                                                    offset=MB_MAP['MB_MOTOR_SETPOINT'],
+                                                    value=current_speed[board])
+
+                                self.uki_send_comms(address=board_mapping[board],
+                                                    offset=MB_MAP['MB_MOTOR_ACCEL'],
+                                                    value=current_accel[board])
+
+                            time.sleep(frame_period)
+
+                    if loop_count < (loops - 1):
+                        loop_count += 1
+                    else:
                         self.playing = False
 
-                    # Loop over each remaining row in CSV
-                    frame_number = 1
-                    for row in csv_reader:
-                        if not self.playing:
-                            break
+                if not self.playing:
+                    piano_state = piano_states['STOPPING']
 
-                        self.logger.debug('Frame ' + str(frame_number) + ' (row ' + str(frame_number + 1) + ')')
-                        frame_number += 1
+            elif piano_state == piano_states['STOPPING']:
+                # Send final stop command to finish script
+                for board in board_names:
+                    self.uki_send_comms(address=board_mapping[board],
+                                        offset=MB_MAP['MB_MOTOR_SETPOINT'],
+                                        value=0)
+                    self.uki_send_comms(address=board_mapping[board],
+                                        offset=MB_MAP['MB_MOTOR_ACCEL'],
+                                        value=100)
 
-                        # Check for invalid row, too long/short
-
-                        # Loop over each cell in the row, process non-blank entries
-                        for cell_index in range(0, len(row)):
-                            if row[cell_index] != '':
-                                if speed_accel[cell_index] == 'Speed':
-                                    self.logger.info(actuator_names_by_col[cell_index] + ' speed set to ' + row[cell_index])
-                                    current_speed[actuator_names_by_col[cell_index]] = int(row[cell_index])
-                                elif speed_accel[cell_index] == 'Accel':
-                                    self.logger.info(actuator_names_by_col[cell_index] + ' accel set to ' + row[cell_index])
-                                    current_accel[actuator_names_by_col[cell_index]] = int(row[cell_index])
-                                else:
-                                    self.logger.warning('Invalid column name, does not contain "_Speed" or "_Accel"' +
-                                                        header[cell_index])
-                                    # Don't exit, need to fall thru to force stop
-
-                        for board in board_names:
-                            # Range check inputs, warn?
-
-                            # Just for now always update every board, every frame
-                            self.uki_send_comms(address=board_mapping[board],
-                                                offset=MB_MAP['MB_MOTOR_SETPOINT'],
-                                                value=current_speed[board])
-
-                            self.uki_send_comms(address=board_mapping[board],
-                                                offset=MB_MAP['MB_MOTOR_ACCEL'],
-                                                value=current_accel[board])
-
-                        time.sleep(frame_period)
-
-            # Send final stop command to finish script
-            for board in board_names:
-                self.uki_send_comms(address=board_mapping[board],
-                                    offset=MB_MAP['MB_MOTOR_SETPOINT'],
-                                    value=0)
-                self.uki_send_comms(address=board_mapping[board],
-                                    offset=MB_MAP['MB_MOTOR_ACCEL'],
-                                    value=100)
-
-            #if self.playing:
-                self.playing = False
                 self.logger.info("Script finished")
+                piano_state = piano_states['IDLE']
 
     def periodic_gui_update(self):
         self.gui.process_queue()
-        self.master.after(100, self.periodic_gui_update)   # Update GUI with wrapper info every 100ms
+        self.master.after(int(THREAD_DELAY * 1000), self.periodic_gui_update)   # Update GUI with wrapper info every few ms
 
 
 if __name__ == "__main__":
