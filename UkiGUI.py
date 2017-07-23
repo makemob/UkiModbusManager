@@ -21,7 +21,10 @@ import queue
 DEFAULT_CONFIG_FILE = 'BenchtestConfig.json'
 #DEFAULT_LEFT_COMM_PORT = 'COM4' # None
 DEFAULT_LEFT_COMM_PORT = '/dev/tty.usbserial-A101OCIF'
-DEFAULT_RIGHT_COMM_PORT = 'COM9' # None
+DEFAULT_RIGHT_COMM_PORT = None #'COM9' # None
+
+DEFAULT_PIANO_LOOPS = 1
+DEFAULT_PIANO_RATE = 0.5  # seconds
 
 MAX_WRAPPER_LOG_ROWS = 1000
 
@@ -107,51 +110,88 @@ class UkiGUI:
         self.path_selector.grid(row=row_num, column=1, columnspan=3, sticky='EW')
         self.refresh_button = Button(master, text='Refresh Scripts', command=self.update_filenames)
         self.refresh_button.grid(row=row_num, column=4)
+        row_num += 1
+
+        # Set loop count
+        self.piano_loops = IntVar()
+        self.piano_loops.set(DEFAULT_PIANO_LOOPS)
+        self.piano_loops_label = Label(master, text='Script loops:')
+        self.piano_loops_label.grid(row=row_num, column=0, sticky=W)
+        self.piano_loops_entry = Entry(master, textvariable=self.piano_loops)
+        self.piano_loops_entry.grid(row=row_num, column=1, columnspan=3, sticky='EW')
+        row_num += 1
+
+        # Set script rate
+        self.piano_rate = DoubleVar()
+        self.piano_rate.set(DEFAULT_PIANO_RATE)
+        self.piano_rate_label = Label(master, text='Script rate (secs/row):')
+        self.piano_rate_label.grid(row=row_num, column=0, sticky=W)
+        self.piano_rate_entry = Entry(master, textvariable=self.piano_rate)
+        self.piano_rate_entry.grid(row=row_num, column=1, columnspan=3, sticky='EW')
+        row_num += 1
 
         # List scripts
         self.list_label = Label(master, text='Select script:')
-        self.list_label.grid(row=row_num + 1, column=0, sticky='NW')
+        self.list_label.grid(row=row_num, column=0, sticky='NW')
         self.files_listbox = Listbox(master)
-        self.files_listbox.grid(row=row_num + 1, column=1, columnspan=3, sticky='NSEW')
+        self.files_listbox.grid(row=row_num, column=1, columnspan=3, sticky='NSEW')
         self.update_filenames()
 
         self.play_button = Button(master, text='Run Script', command=self.trigger_script, state=DISABLED)
-        self.play_button.grid(row=row_num + 1, column=4)
+        self.play_button.grid(row=row_num, column=4)
 
         # Wrapper debug out
         self.wrapper_label = Label(master, text='Log:')
-        self.wrapper_label.grid(row=row_num + 2, column=0, sticky='W')
+        self.wrapper_label.grid(row=row_num + 1, column=0, sticky='W')
         self.wrapper_log = tkst.ScrolledText(master, height=15, wrap=NONE, relief=SUNKEN, bd=2)
-        self.wrapper_log.grid(row=row_num + 3, column=0, columnspan=5, sticky='NSEW')
+        self.wrapper_log.grid(row=row_num + 2, column=0, columnspan=5, sticky='NSEW')
 
         # Only allow text boxes to expand vertically
-        master.rowconfigure(row_num + 1, weight=1)
-        master.rowconfigure(row_num + 3, weight=1)
+        master.rowconfigure(row_num, weight=1)
+        master.rowconfigure(row_num + 2, weight=1)
 
         # All columns can expand
         for col in range(0, 5):
             master.columnconfigure(col, weight=1)
 
+    def add_to_gui_queue(self, msg = ''):
+        # Build up object to place in queue from GUI to UKI MM
+
+        # First build the config dictionary
+        script_file = self.files_listbox.get(self.files_listbox.curselection()) if self.files_listbox.curselection() else ""
+        cfg = {'left_comm_port': self.left_comm_port.get(),
+               'left_comm_disabled': self.left_comm_disabled.get(),
+               'right_comm_port': self.right_comm_port.get(),
+               'right_comm_disabled': self.right_comm_disabled.get(),
+               'config_file': self.config_file.get(),
+               'script_file': script_file, #self.files_listbox.get(self.files_listbox.curselection()),
+               'script_loops': self.piano_loops.get(),
+               'script_rate': self.piano_rate.get()}
+
+        # Send dict with config & message to queue
+        queue_obj = {'config': cfg, 'message': msg}
+        self.uki_mm_thread_queue.put(queue_obj)
+
     def trigger_quit(self):
-        self.uki_mm_thread_queue.put('QUIT')
+        self.add_to_gui_queue('QUIT')
         self.master.quit()
 
     def trigger_script(self):
-        self.uki_mm_thread_queue.put('SCRIPT:' + "blahblah.csv")
+        self.add_to_gui_queue('PLAY')
 
     def trigger_stop(self):
-        self.uki_mm_thread_queue.put('STOP')
+        self.add_to_gui_queue('STOP')
         self.input_source.set('None')
         self.input_changed()
 
     def trigger_reset(self):
-        self.uki_mm_thread_queue.put('RESET')
+        self.add_to_gui_queue('RESET')
 
     def trigger_restart(self):
-        self.uki_mm_thread_queue.put('RESTART')
+        self.add_to_gui_queue('RESTART')
 
     def input_changed(self):
-        self.uki_mm_thread_queue.put(self.input_source.get())
+        self.add_to_gui_queue(self.input_source.get())
         play_state = ACTIVE if self.input_source.get() == 'CSV' else DISABLED
         self.play_button.config(state=play_state)  # grey out play button
 
@@ -162,8 +202,8 @@ class UkiGUI:
             self.files_listbox.insert(END, os.path.split(filename)[1])
 
     def process_queue(self):
+        # Add incoming log messages to the GUI in scrollbox
         while self.gui_queue.qsize():
-            # Add incoming log messages to the GUI in scrollbox
             try:
                 msg = self.gui_queue.get(0).message  # queue holds LogRecords
 
@@ -183,6 +223,8 @@ class UkiGUI:
             except queue.Empty:
                 pass
 
+        # Add current config dict to outgoing queue to update Uki MM task
+        self.add_to_gui_queue()
 
 
 

@@ -152,7 +152,8 @@ class UkiModbus:
 
 
 class UkiModbusManager:
-    def __init__(self, left_serial_port, right_serial_port, config_filename, logger=None, incoming_queue=None):
+    def __init__(self, left_serial_port, right_serial_port, config_filename, logger=None,
+                 incoming_queue=None, outgoing_queue=None):
 
         self.output_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)  # Internet, UDP
 
@@ -161,13 +162,21 @@ class UkiModbusManager:
         self.input_socket.setblocking(False)
 
         self.incoming_queue = incoming_queue  # Optional queue to directly send commands to wrapper (rather than UDP)
+        self.outgoing_queue = outgoing_queue  # Optional queue to directly send responses from boards (rather than UDP)
 
         self.incoming_msg_received = False  # Don't activate heartbeat timeout until one message received
+        self.last_incoming_msg_time = time.time()
         self.udp_input_enabled = True
 
         self.config_filename = config_filename
         self.board_config = {'actuators': []}
         self.read_board_config_file()
+
+        self.major_poll_index = 0  # Position in full round robin
+        self.minor_poll_index = 0  # Position in inner round robin
+        self.begin_major_robin_time = time.time()  # Keep track of loop timing
+        self.begin_minor_robin_time = time.time()
+
         self.enabled_boards = []
         left_boards = []
         right_boards = []
@@ -243,10 +252,14 @@ class UkiModbusManager:
                 self.get_port_for_address(address).shadow_map[address][offset] = None
 
         # Convert to bytes
-        packet = [entry.to_bytes(2, byteorder='little') for entry in packet]
+        byte_packet = [entry.to_bytes(2, byteorder='little') for entry in packet]
         #self.logger.info(len(packet))
         # Flatten to byte string, ship out
-        self.output_socket.sendto(b"".join(packet), (IP_ADDRESS, OUTPUT_UDP_PORT))
+        self.output_socket.sendto(b"".join(byte_packet), (IP_ADDRESS, OUTPUT_UDP_PORT))
+
+        # Send to output queue if it exists
+        if self.outgoing_queue is not None:
+            self.outgoing_queue.put(packet)
 
     def estop_all_boards(self):
         """Queue an estop command to all boards"""
@@ -395,6 +408,8 @@ class UkiModbusManager:
                     self.get_port_for_address(write_address).write_queue[write_address].append((write_offset, write_value))
                 except queue.Empty:
                     pass
+                except KeyError:
+                    self.logger.warning("Command received for unknown address: " + str(write_address))
 
 
     def check_and_write_config_reg(self, address, offset, desired_value):
@@ -423,43 +438,57 @@ class UkiModbusManager:
 
     def main_poll_loop(self):
         """
-        Main loop for UkiModbusManager
+        Main round robin loop for UkiModbusManager
         """
-        # Reread config file each full round robin in case it has been edited
-        self.read_board_config_file()
 
-        for full_read_address in self.enabled_boards:
+        # Update inner round robin (short reads)
+        if self.minor_poll_index >= len(self.enabled_boards):
+            self.minor_poll_index = 0
+            self.major_poll_index += 1
+            self.logger.debug("Completed minor round robin in " + str(time.time() - self.begin_minor_robin_time) + " seconds")
+            self.begin_minor_robin_time = time.time()
 
-            # Round robin through all modbus connected boards
-            begin_robin_time = time.time()
-            for address in self.enabled_boards:
+        # Update full/outer round robin (full reads)
+        if self.major_poll_index >= len(self.enabled_boards):
+            self.major_poll_index = 0
+            self.read_board_config_file()  # Reread config file each full round robin in case it has been edited
+            self.logger.debug("Completed full round robin in " + str(time.time() - self.begin_major_robin_time) + " seconds")
+            self.begin_major_robin_time = time.time()
 
-                # Check for incoming UDP messages, cue up writes
-                if self.process_incoming_packet():
-                    last_incoming_msg_time = time.time()
-                    self.incoming_msg_received = True
+        full_read_address = self.enabled_boards[self.major_poll_index]
+        address = self.enabled_boards[self.minor_poll_index]
 
-                # Check for incoming queued direct messages, cue up writes
-                self.process_incoming_queue()
+        # Check for incoming UDP messages, cue up writes
+        if self.process_incoming_packet():
+            self.last_incoming_msg_time = time.time()
+            self.incoming_msg_received = True
 
-                # Check for heartbeat timeout for incoming UDP messages
-                if self.incoming_msg_received and (time.time() - last_incoming_msg_time) > INCOMING_MSG_HEARTBEAT_TIMEOUT:
-                    self.estop_all_boards()
+        # Check for incoming queued direct messages, cue up writes
+        self.process_incoming_queue()
 
-                # High priority reads, do every time
-                self.query_and_forward(address, MB_MAP['MB_ESTOP_STATE'], MB_MAP['MB_OUTWARD_ENDSTOP_STATE'])
+        # Check for heartbeat timeout for incoming UDP messages
+        if self.incoming_msg_received and (time.time() - self.last_incoming_msg_time) > INCOMING_MSG_HEARTBEAT_TIMEOUT:
+            self.estop_all_boards()
 
-                # Lower priority reads, do one board per loop
-                if address == full_read_address:
-                    self.logger.debug("Full read " + str(address))
-                    self.query_and_forward(address, MB_MAP['MB_BRIDGE_CURRENT'], MB_MAP['MB_BOARD_TEMPERATURE'])
-                    self.query_and_forward(address, MB_MAP['MB_MOTOR_SETPOINT'], MB_MAP['MB_CURRENT_LIMIT_OUTWARD'])
-                    self.query_and_forward(address, MB_MAP['MB_INWARD_ENDSTOP_COUNT'], MB_MAP['MB_HEARTBEAT_EXPIRIES'])
-                    self.update_board_config(address)
+        # High priority reads, do every time
+        self.query_and_forward(address, MB_MAP['MB_ESTOP_STATE'], MB_MAP['MB_OUTWARD_ENDSTOP_STATE'])
 
-            self.logger.info("Completed round robin in " + str(time.time() - begin_robin_time) + " seconds")
+        # Lower priority reads, do one board per loop
+        if address == full_read_address:
+            self.logger.debug("Full read " + str(address))
+            self.query_and_forward(address, MB_MAP['MB_BRIDGE_CURRENT'], MB_MAP['MB_BOARD_TEMPERATURE'])
+            self.query_and_forward(address, MB_MAP['MB_MOTOR_SETPOINT'], MB_MAP['MB_CURRENT_LIMIT_OUTWARD'])
+            self.query_and_forward(address, MB_MAP['MB_INWARD_ENDSTOP_COUNT'], MB_MAP['MB_HEARTBEAT_EXPIRIES'])
+            self.update_board_config(address)
 
-            self.flush_write_queue()
+        # Write out commands in queue
+        self.flush_write_queue()
+
+        self.minor_poll_index += 1
+
+        # Catch potential spin case where both serial ports are disabled
+        if self.uki_ports['left'].enabled is False and self.uki_ports['left'].enabled is False:
+            time.sleep(1)   # Introduce delay to calm things down (only really used in debug)
 
     def cleanup(self):
         """
