@@ -32,13 +32,12 @@ LOG_LEVEL_MAP = {'ERROR': logging.ERROR,
 RESET_LOOPS = 3  # Number of times to reset boards prior to running script
 THREAD_DELAY = 0.1  # Seconds to delay when avoiding thread spinning.  Sets GUI update rate
 
-# log level selection not working
-# error handling: queue full, invalid config input
-# heartbeat
-# test speed cap
-# move player piano into separate file
-# multiple logger queues, threads currently access logger directly
-# 'estop detected' warning doesn't appear
+# Still to do:
+# - build windows executable
+# - rework log levels to be more useful
+# - error handling: queues full, invalid config input
+# - thread interlocking, one exception should quit all
+# - move player piano into separate file
 
 class ThreadManager:
     def __init__(self, master):
@@ -135,7 +134,7 @@ class ThreadManager:
                     pass
 
             # Check for messages coming in from boards eg. EStop state
-            last_estopped_boards = estopped_boards
+            last_estopped_boards = estopped_boards.copy()
             while self.uki_mm_responses_queue.qsize():
                 try:
                     response = self.uki_mm_responses_queue.get(0)
@@ -158,7 +157,7 @@ class ThreadManager:
                     estop_active = True
             self.fault_active = estop_active  # Transfer only once value determined, can't glitch through False
             if estop_active and last_estopped_boards != estopped_boards:
-                self.logger.warning("EStop detected: " + str(estopped_boards))
+                self.logger.warning("EStop detected: " + ','.join([str(key) for key in estopped_boards]))
 
         uki_manager.cleanup()
 
@@ -195,10 +194,11 @@ class ThreadManager:
                     board_config = yaml.safe_load(open(config_file, 'r', encoding='utf8'))
 
                     for cfg in board_config['actuators']:
-                        board_names.append(cfg['name'])
-                        board_mapping[cfg['name']] = cfg['address']
-                        current_speed[cfg['name']] = 0
-                        current_accel[cfg['name']] = 100
+                        if cfg['enabled']:
+                            board_names.append(cfg['name'])
+                            board_mapping[cfg['name']] = cfg['address']
+                            current_speed[cfg['name']] = 0
+                            current_accel[cfg['name']] = 100
                 except FileNotFoundError:
                     self.logger.error('Config file not found: ' + config_file)
                     self.playing = False

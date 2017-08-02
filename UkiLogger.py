@@ -27,10 +27,11 @@ def prep_handler(handler, log_level):
 def get_logger(log_level=logging.DEBUG, queue=None):
     logger = logging.getLogger('uki_logger')
     logger.setLevel(log_level)
-    logger.addHandler(prep_handler(logging.StreamHandler(), log_level))
+    # Set handlers to lowest level, filter at logger only
+    logger.addHandler(prep_handler(logging.StreamHandler(), logging.DEBUG))
 
     if queue is not None:
-        logger.addHandler(prep_handler(logging.handlers.QueueHandler(queue), log_level))
+        logger.addHandler(prep_handler(logging.handlers.QueueHandler(queue), logging.DEBUG))
 
     return logger
 

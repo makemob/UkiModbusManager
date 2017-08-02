@@ -168,7 +168,16 @@ class UkiGUI:
     def add_to_gui_queue(self, msg = ''):
         # Build up object to place in queue from GUI to UKI MM
 
-        # First build the config dictionary
+        # First build the config dictionary:
+        # Need to protect against empty numeric values
+        try:
+            piano_loops = self.piano_loops.get()
+        except TclError:
+            piano_loops = DEFAULT_PIANO_LOOPS
+        try:
+            piano_rate = self.piano_rate.get()
+        except TclError:
+            piano_rate = DEFAULT_PIANO_RATE
         script_file = self.files_listbox.get(self.files_listbox.curselection()) if self.files_listbox.curselection() else ""
         cfg = {'left_comm_port': self.left_comm_port.get(),
                'left_comm_disabled': self.left_comm_disabled.get(),
@@ -176,8 +185,8 @@ class UkiGUI:
                'right_comm_disabled': self.right_comm_disabled.get(),
                'config_file': self.config_file.get(),
                'script_file': script_file, #self.files_listbox.get(self.files_listbox.curselection()),
-               'script_loops': self.piano_loops.get(),
-               'script_rate': self.piano_rate.get(),
+               'script_loops': piano_loops,
+               'script_rate': piano_rate,
                'log_level': self.log_level.get()}
 
         # Send dict with config & message to queue
