@@ -34,10 +34,10 @@ THREAD_DELAY = 0.1  # Seconds to delay when avoiding thread spinning.  Sets GUI 
 
 # Still to do:
 # - build windows executable
-# - rework log levels to be more useful
 # - error handling: queues full, invalid config input
 # - thread interlocking, one exception should quit all
 # - move player piano into separate file
+# - small memory leak somewhere..
 
 class ThreadManager:
     def __init__(self, master):
@@ -100,7 +100,7 @@ class ThreadManager:
 
                     if LOG_LEVEL_MAP[gui_config['log_level']] != self.log_level:
                         self.log_level = LOG_LEVEL_MAP[gui_config['log_level']]
-                        self.logger.info("Log level changed to " + gui_config['log_level'])
+                        self.logger.warning("Log level changed to " + gui_config['log_level'])
                         self.logger.setLevel(LOG_LEVEL_MAP[gui_config['log_level']])
 
                     if not uki_mm_started:
@@ -114,8 +114,10 @@ class ThreadManager:
                         self.running = False
                     elif msg == 'RESTART':
                         self.logger.warning('Restarting UkiModbusManager')
+                        udpEnabled = uki_manager.udp_input_enabled
                         uki_manager.cleanup()
                         uki_manager = self.start_uki_modbus_manager(gui_config)
+                        uki_manager.udp_input(udpEnabled)
                     elif msg == 'UDP':
                         uki_manager.udp_input(True)
                         uki_manager.set_accel_config(True)      # Allow config file to set accel
@@ -214,7 +216,7 @@ class ThreadManager:
             elif piano_state == piano_states['RESET_ESTOP']:
                 # Reset estop a few times just in case of downstream errors
                 for reset_loops in range(0, RESET_LOOPS):
-                    self.logger.info("Resetting all boards: " + str(reset_loops + 1) + " of " + str(RESET_LOOPS) + " attempts")
+                    self.logger.warning("Resetting all boards: " + str(reset_loops + 1) + " of " + str(RESET_LOOPS) + " attempts")
                     for board in board_names:
                         self.uki_send_comms(address=board_mapping[board],
                                             offset=MB_MAP['MB_RESET_ESTOP'],
@@ -228,7 +230,7 @@ class ThreadManager:
                     piano_state = piano_states['IDLE']
 
             elif piano_state == piano_states['ROLLING']:
-                self.logger.info('Starting loop ' + str(loop_count + 1) + ' of ' + str(loops) + ': ' + csv_filename)
+                self.logger.warning('Starting loop ' + str(loop_count + 1) + ' of ' + str(loops) + ': ' + csv_filename)
 
                 if not os.path.isfile(csv_filename):
                     self.logger.error('Script file not found:' + csv_filename)

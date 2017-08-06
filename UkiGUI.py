@@ -154,7 +154,8 @@ class UkiGUI:
         # Wrapper debug out
         self.wrapper_label = Label(master, text='Log:')
         self.wrapper_label.grid(row=row_num + 1, column=0, sticky='W')
-        self.wrapper_log = tkst.ScrolledText(master, height=15, wrap=NONE, relief=SUNKEN, bd=2)
+        # Must set undo to false in log window or memory usage expands unbounded..
+        self.wrapper_log = tkst.ScrolledText(master, height=15, wrap=NONE, relief=SUNKEN, bd=2, undo=False)
         self.wrapper_log.grid(row=row_num + 2, column=0, columnspan=5, sticky='NSEW')
 
         # Only allow text boxes to expand vertically

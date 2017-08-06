@@ -323,7 +323,7 @@ class UkiModbusManager:
                                 # Catch the only broadcast command we will accept: emergency stop
                                 if write_address == 0:
                                     if write_offset == MB_MAP['MB_ESTOP']:
-                                        self.estop_all_boards(self)
+                                        self.estop_all_boards()
                                         valid_msg_received = True
                                     else:
                                         self.logger.warning("Invalid broadcast message received")
@@ -345,6 +345,10 @@ class UkiModbusManager:
     def udp_input(self, enabled):
         self.udp_input_enabled = enabled
         self.logger.warning("UDP input set to " + str(enabled))
+        if not enabled:
+            # Stop everything and disable heartbeat if not using UDP
+            self.estop_all_boards()
+            self.incoming_msg_received = False
 
     def set_accel_config(self, enabled):
         self.honour_accel_config = enabled
