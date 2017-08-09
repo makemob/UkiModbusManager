@@ -320,10 +320,13 @@ class UkiModbusManager:
                                 #write_value_signed = int.from_bytes(incoming_packet[(pos + 2):(pos + 4)], byteorder='little',
                                 #                             signed=True)
 
-                                # Catch the only broadcast command we will accept: emergency stop
+                                # Catch the only broadcast commands we will accept: emergency stop and reset
                                 if write_address == 0:
                                     if write_offset == MB_MAP['MB_ESTOP']:
                                         self.estop_all_boards()
+                                        valid_msg_received = True
+                                    elif write_offset == MB_MAP['MB_RESET_ESTOP'] and write_value == 0x5050:
+                                        self.reset_all_boards()
                                         valid_msg_received = True
                                     else:
                                         self.logger.warning("Invalid broadcast message received")
