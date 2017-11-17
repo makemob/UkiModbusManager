@@ -65,10 +65,10 @@ INCOMING_MSG_HEARTBEAT_TIMEOUT = 5  # Allowable seconds between incoming UDP mes
 INTER_FRAME_DELAY = 0.002  # 1.8ms used on Scarab board for 19200 baud, use 2ms as some inaccuracy at both ends..
 
 DEFAULT_CONFIG_FILENAME = 'UkiConfig.json'
-DEFAULT_LEFT_SERIAL_PORT = 'COM4'   # Set to None to disable
-DEFAULT_RIGHT_SERIAL_PORT = 'COM9'  # Set to None to disable
+DEFAULT_LEFT_SERIAL_PORT = 'COM5'   # Set to None to disable
+DEFAULT_RIGHT_SERIAL_PORT = 'COM4'  # Set to None to disable
 
-SEND_EVERY_WRITE = False  # Debug mode to send a write every loop, regardless of whether reg already holds that value
+SEND_EVERY_WRITE = True  # Debug mode to send a write every loop, regardless of whether reg already holds that value
 
 MAX_MOTOR_SPEED = 60  # max allowable motor speed %
 
