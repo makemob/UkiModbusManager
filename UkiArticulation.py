@@ -116,6 +116,7 @@ class ThreadManager:
                         self.logger.warning('Restarting UkiModbusManager')
                         udpEnabled = uki_manager.udp_input_enabled
                         uki_manager.cleanup()
+                        time.sleep(5)      # Short delay to allow comms drivers to become available on Windows systems
                         uki_manager = self.start_uki_modbus_manager(gui_config)
                         uki_manager.udp_input(udpEnabled)
                     elif msg == 'UDP':

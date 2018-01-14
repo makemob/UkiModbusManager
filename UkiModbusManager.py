@@ -166,7 +166,7 @@ class UkiModbusManager:
 
         self.honour_accel_config = True   # Whether or not we honour the accel settings in config file
 
-        self.incoming_msg_received = False  # Don't activate heartbeat timeout until one message received
+        self.heartbeat_armed = False  # Don't activate heartbeat timeout until one message received
         self.last_incoming_msg_time = time.time()
         self.udp_input_enabled = True
 
@@ -274,6 +274,7 @@ class UkiModbusManager:
         self.logger.info("Sending reset to all boards")
         for reset_address in self.enabled_boards:
             self.get_port_for_address(reset_address).write_queue[reset_address].append((MB_MAP['MB_RESET_ESTOP'], 0x5050))
+        self.heartbeat_armed = False  # Heartbeat will be reenabled when next message arrives
 
     def sanity_check_command(self, write_offset, write_value):
         """Test a command before it is sent out in case it could prove hazardous"""
@@ -351,7 +352,7 @@ class UkiModbusManager:
         if not enabled:
             # Stop everything and disable heartbeat if not using UDP
             self.estop_all_boards()
-            self.incoming_msg_received = False
+            self.heartbeat_armed = False
 
     def set_accel_config(self, enabled):
         self.honour_accel_config = enabled
@@ -474,13 +475,14 @@ class UkiModbusManager:
         # Check for incoming UDP messages, cue up writes
         if self.process_incoming_packet():
             self.last_incoming_msg_time = time.time()
-            self.incoming_msg_received = True
+            self.heartbeat_armed = True
 
         # Check for incoming queued direct messages, cue up writes
         self.process_incoming_queue()
 
         # Check for heartbeat timeout for incoming UDP messages
-        if self.incoming_msg_received and (time.time() - self.last_incoming_msg_time) > INCOMING_MSG_HEARTBEAT_TIMEOUT:
+        if self.heartbeat_armed and (time.time() - self.last_incoming_msg_time) > INCOMING_MSG_HEARTBEAT_TIMEOUT:
+            self.logger.warning("UDP heartbeat timeout")
             self.estop_all_boards()
 
         # High priority reads, do every time
