@@ -4,9 +4,10 @@
     {
       "name": "TestBox",
       "address": 24,
-      "inwardCurrentLimit": 1500,
+      "inwardCurrentLimit": 1000,
       "outwardCurrentLimit": 1000,
-      "acceleration": 100,
+      "outwardExtensionLimit": 3000,
+      "acceleration": 91,
       "enabled": true,
       "port": "Left"
     },

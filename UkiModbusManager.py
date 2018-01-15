@@ -447,6 +447,9 @@ class UkiModbusManager:
         # Update regs as needed
         self.check_and_write_config_reg(address, MB_MAP['MB_CURRENT_LIMIT_INWARD'], board_config['inwardCurrentLimit'])
         self.check_and_write_config_reg(address, MB_MAP['MB_CURRENT_LIMIT_OUTWARD'], board_config['outwardCurrentLimit'])
+        # Cannot set inward current limit as signed value not converted properly..  Don't need this for now
+        # self.check_and_write_config_reg(address, MB_MAP['MB_EXTENSION_LIMIT_INWARD'], board_config['inwardExtensionLimit'])
+        self.check_and_write_config_reg(address, MB_MAP['MB_EXTENSION_LIMIT_OUTWARD'], board_config['outwardExtensionLimit'])
         if self.honour_accel_config:
             self.check_and_write_config_reg(address, MB_MAP['MB_MOTOR_ACCEL'], board_config['acceleration'])
 
@@ -486,14 +489,14 @@ class UkiModbusManager:
             self.estop_all_boards()
 
         # High priority reads, do every time
-        self.query_and_forward(address, MB_MAP['MB_ESTOP_STATE'], MB_MAP['MB_OUTWARD_ENDSTOP_STATE'])
+        self.query_and_forward(address, MB_MAP['MB_EXTENSION'], MB_MAP['MB_INWARD_ENDSTOP_STATE'])
 
         # Lower priority reads, do one board per loop
         if address == full_read_address:
             self.logger.debug("Full read " + str(address))
             self.query_and_forward(address, MB_MAP['MB_BRIDGE_CURRENT'], MB_MAP['MB_BOARD_TEMPERATURE'])
-            self.query_and_forward(address, MB_MAP['MB_MOTOR_SETPOINT'], MB_MAP['MB_CURRENT_LIMIT_OUTWARD'])
-            self.query_and_forward(address, MB_MAP['MB_INWARD_ENDSTOP_COUNT'], MB_MAP['MB_HEARTBEAT_EXPIRIES'])
+            self.query_and_forward(address, MB_MAP['MB_MOTOR_SETPOINT'], MB_MAP['MB_EXTENSION_LIMIT_OUTWARD'])
+            self.query_and_forward(address, MB_MAP['MB_INWARD_ENDSTOP_COUNT'], MB_MAP['MB_EXTENSION_TRIPS_OUTWARD'])
             self.update_board_config(address)
 
         # Write out commands in queue
