@@ -72,6 +72,8 @@ SEND_EVERY_WRITE = True  # Debug mode to send a write every loop, regardless of 
 
 MAX_MOTOR_SPEED = 60  # max allowable motor speed %
 
+HEARTBEAT_ADDRESS = 240   # black hole address to send heartbeats, if not wanting to send any command to a board
+
 
 class UkiModbus:
 
@@ -310,7 +312,10 @@ class UkiModbusManager:
                         # Extract write address (first two bytes)
                         write_address = int.from_bytes(incoming_packet[0:2], byteorder='little', signed=False)
 
-                        if write_address not in self.enabled_boards + [0]:
+                        if write_address == HEARTBEAT_ADDRESS:
+                            # Drop messages to heartbeat adress
+                            valid_msg_received = True
+                        elif write_address not in self.enabled_boards + [0]:
                             self.logger.warning("Received message for board that is not enabled: " + str(write_address))
                         else:
                             # Step through the rest of the packet four bytes at a time (ie. break down into offset/value pairs)
@@ -425,12 +430,17 @@ class UkiModbusManager:
                     self.logger.warning("Command received for unknown address: " + str(write_address))
 
 
-    def check_and_write_config_reg(self, address, offset, desired_value):
+    def check_and_write_config_reg(self, address, offset, board_config, config_key):
         """Static function to check a reg is set to a desired value, queues write if not"""
-        if self.get_port_for_address(address).shadow_map[address][offset] != desired_value:
-            self.get_port_for_address(address).write_queue[address].append((offset, desired_value))
-            self.logger.info("Updating config reg for address " + str(address) +
-                             " offset " + str(offset) + " = " + str(desired_value))
+        try:
+            desired_value = board_config[config_key]
+            if self.get_port_for_address(address).shadow_map[address][offset] != desired_value:
+                self.get_port_for_address(address).write_queue[address].append((offset, desired_value))
+                self.logger.info("Updating config reg for address " + str(address) +
+                                 " offset " + str(offset) + " = " + str(desired_value))
+        except KeyError:
+            # Not all keys exist for each actuator, ignore missing
+            pass
 
     def update_board_config(self, address):
         """
@@ -445,13 +455,14 @@ class UkiModbusManager:
                 board_config = cfg
 
         # Update regs as needed
-        self.check_and_write_config_reg(address, MB_MAP['MB_CURRENT_LIMIT_INWARD'], board_config['inwardCurrentLimit'])
-        self.check_and_write_config_reg(address, MB_MAP['MB_CURRENT_LIMIT_OUTWARD'], board_config['outwardCurrentLimit'])
+        self.check_and_write_config_reg(address, MB_MAP['MB_CURRENT_LIMIT_INWARD'], board_config, 'inwardCurrentLimit')
+        self.check_and_write_config_reg(address, MB_MAP['MB_CURRENT_LIMIT_OUTWARD'], board_config, 'outwardCurrentLimit')
         # Cannot set inward current limit as signed value not converted properly..  Don't need this for now
-        # self.check_and_write_config_reg(address, MB_MAP['MB_EXTENSION_LIMIT_INWARD'], board_config['inwardExtensionLimit'])
-        self.check_and_write_config_reg(address, MB_MAP['MB_EXTENSION_LIMIT_OUTWARD'], board_config['outwardExtensionLimit'])
+        # self.check_and_write_config_reg(address, MB_MAP['MB_EXTENSION_LIMIT_INWARD'], board_config, 'inwardExtensionLimit')
+        self.check_and_write_config_reg(address, MB_MAP['MB_EXTENSION_LIMIT_OUTWARD'], board_config, 'outwardExtensionLimit')
+        self.check_and_write_config_reg(address, MB_MAP['MB_POSITION_ENCODER_SCALING'], board_config, 'positionEncoderScaling')
         if self.honour_accel_config:
-            self.check_and_write_config_reg(address, MB_MAP['MB_MOTOR_ACCEL'], board_config['acceleration'])
+            self.check_and_write_config_reg(address, MB_MAP['MB_MOTOR_ACCEL'], board_config, 'acceleration')
 
     def main_poll_loop(self):
         """
@@ -495,7 +506,7 @@ class UkiModbusManager:
         if address == full_read_address:
             self.logger.debug("Full read " + str(address))
             self.query_and_forward(address, MB_MAP['MB_BRIDGE_CURRENT'], MB_MAP['MB_BOARD_TEMPERATURE'])
-            self.query_and_forward(address, MB_MAP['MB_MOTOR_SETPOINT'], MB_MAP['MB_EXTENSION_LIMIT_OUTWARD'])
+            self.query_and_forward(address, MB_MAP['MB_MOTOR_SETPOINT'], MB_MAP['MB_POSITION_ENCODER_SCALING'])
             self.query_and_forward(address, MB_MAP['MB_INWARD_ENDSTOP_COUNT'], MB_MAP['MB_EXTENSION_TRIPS_OUTWARD'])
             self.update_board_config(address)
 

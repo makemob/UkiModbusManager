@@ -170,6 +170,8 @@ class ThreadManager:
             self.uki_mm_comms_queue.put((address, offset, value))
 
     def uki_player_piano(self):
+        # Reads from CSV script containing speed (%), accel (%) or position (mm) targets
+
         piano_states = {'IDLE': 0, 'INIT': 1, 'RESET_ESTOP': 2, 'ROLLING': 3, 'STOPPING': 4}
         piano_state = piano_states['IDLE']
 
@@ -193,6 +195,8 @@ class ThreadManager:
                 board_mapping = {}
                 current_speed = {}
                 current_accel = {}
+                current_position = {}
+                position_control_boards = []
                 try:
                     board_config = yaml.safe_load(open(config_file, 'r', encoding='utf8'))
 
@@ -202,6 +206,7 @@ class ThreadManager:
                             board_mapping[cfg['name']] = cfg['address']
                             current_speed[cfg['name']] = 0
                             current_accel[cfg['name']] = 100
+                            current_position[cfg['name']] = None
                 except FileNotFoundError:
                     self.logger.error('Config file not found: ' + config_file)
                     self.playing = False
@@ -244,10 +249,17 @@ class ThreadManager:
                         header = next(csv_reader)
                         try:
                             actuator_names_by_col = [cell.split('_')[0] for cell in header]
-                            speed_accel = [cell.split('_')[1] for cell in header]
+                            speed_accel_position = [cell.split('_')[1] for cell in header]
                         except IndexError:
                             self.logger.error('Each CSV column heading must have one underscore eg. LeftRearHip_Speed')
                             self.playing = False
+
+                        # Determine which boards are set up for goto position control
+                        for cell_index in range(0, len(header)):
+                            if speed_accel_position[cell_index] == 'Position':
+                                position_control_boards.append(actuator_names_by_col[cell_index])
+                        if position_control_boards:
+                            self.logger.info('The following boards have position control enabled: ' + str(position_control_boards))
 
                         # Loop over each remaining row in CSV
                         frame_number = 1
@@ -268,28 +280,52 @@ class ThreadManager:
                             # Loop over each cell in the row, process non-blank entries
                             for cell_index in range(0, len(row)):
                                 if row[cell_index] != '':
-                                    if speed_accel[cell_index] == 'Speed':
+                                    if speed_accel_position[cell_index] == 'Speed':
                                         self.logger.info(actuator_names_by_col[cell_index] + ' speed set to ' + row[cell_index])
                                         current_speed[actuator_names_by_col[cell_index]] = int(row[cell_index])
-                                    elif speed_accel[cell_index] == 'Accel':
+                                    elif speed_accel_position[cell_index] == 'Accel':
                                         self.logger.info(actuator_names_by_col[cell_index] + ' accel set to ' + row[cell_index])
                                         current_accel[actuator_names_by_col[cell_index]] = int(row[cell_index])
+                                    elif speed_accel_position[cell_index] == 'Position':
+                                        self.logger.info(actuator_names_by_col[cell_index] + ' position set to ' + row[cell_index])
+                                        current_position[actuator_names_by_col[cell_index]] = int(row[cell_index])
                                     else:
-                                        self.logger.warning('Invalid column name, does not contain "_Speed" or "_Accel"' +
+                                        self.logger.warning('Invalid column name, does not contain "_Speed", "_Accel" or "_Position"' +
                                                             header[cell_index])
                                         # Don't exit, need to fall thru to force stop
 
+                            # Send out commands to boards
                             for board in board_names:
                                 # Range check inputs, warn?
 
-                                # Just for now always update every board, every frame
-                                self.uki_send_comms(address=board_mapping[board],
-                                                    offset=MB_MAP['MB_MOTOR_SETPOINT'],
-                                                    value=current_speed[board])
+                                if board in position_control_boards:
+                                    # Send goto position @ speed commands for this board
+                                    if current_position[board] is not None:
+                                        # Only update position once per row to avoid hunting
+                                        self.uki_send_comms(address=board_mapping[board],
+                                                            offset=MB_MAP['MB_GOTO_POSITION'],
+                                                            value=current_position[board] * 10)   # Convert mm to mm/10
+                                        current_position[board] = None
+                                        # The speed column for this board is now a goto speed
+                                        self.uki_send_comms(address=board_mapping[board],
+                                                            offset=MB_MAP['MB_GOTO_SPEED_SETPOINT'],
+                                                            value=current_speed[board])
+                                        # Acceleration can be left out if not wanted, but send anyway
+                                        self.uki_send_comms(address=board_mapping[board],
+                                                            offset=MB_MAP['MB_MOTOR_ACCEL'],
+                                                            value=current_accel[board])
 
-                                self.uki_send_comms(address=board_mapping[board],
-                                                    offset=MB_MAP['MB_MOTOR_ACCEL'],
-                                                    value=current_accel[board])
+                                else:
+                                    # Normal speed/accel mode for this board
+
+                                    # Just for now always update every board, every frame
+                                    self.uki_send_comms(address=board_mapping[board],
+                                                        offset=MB_MAP['MB_MOTOR_SETPOINT'],
+                                                        value=current_speed[board])
+
+                                    self.uki_send_comms(address=board_mapping[board],
+                                                        offset=MB_MAP['MB_MOTOR_ACCEL'],
+                                                        value=current_accel[board])
 
                             time.sleep(frame_period)
 

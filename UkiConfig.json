@@ -6,7 +6,6 @@
       "address": 31,
       "inwardCurrentLimit": 1700,
       "outwardCurrentLimit": 1700,
-      "outwardExtensionLimit": 3000,
       "acceleration": 95,
       "enabled": true,
       "port": "Right"
@@ -16,7 +15,6 @@
       "address": 5,
       "inwardCurrentLimit": 1700,
       "outwardCurrentLimit": 1700,
-      "outwardExtensionLimit": 3000,
       "acceleration": 95,
       "enabled": true,
       "port": "Right"
@@ -26,7 +24,6 @@
       "address": 30,
       "inwardCurrentLimit": 1700,
       "outwardCurrentLimit": 1700,
-      "outwardExtensionLimit": 3000,
       "acceleration": 95,
       "enabled": true,
       "port": "Right"
@@ -36,7 +33,6 @@
       "address": 7,
       "inwardCurrentLimit": 1700,
       "outwardCurrentLimit": 1700,
-      "outwardExtensionLimit": 3000,
       "acceleration": 95,
       "enabled": true,
       "port": "Right"
@@ -46,7 +42,6 @@
       "address": 8,
       "inwardCurrentLimit": 1700,
       "outwardCurrentLimit": 1700,
-      "outwardExtensionLimit": 3000,
       "acceleration": 95,
       "enabled": true,
       "port": "Right"
@@ -56,7 +51,6 @@
       "address": 9,
       "inwardCurrentLimit": 1700,
       "outwardCurrentLimit": 1700,
-      "outwardExtensionLimit": 3000,
       "acceleration": 95,
       "enabled": true,
       "port": "Right"
@@ -66,7 +60,6 @@
       "address": 10,
       "inwardCurrentLimit": 1700,
       "outwardCurrentLimit": 1700,
-      "outwardExtensionLimit": 3000,
       "acceleration": 95,
       "enabled": true,
       "port": "Right"
@@ -76,7 +69,6 @@
       "address": 11,
       "inwardCurrentLimit": 1700,
       "outwardCurrentLimit": 1700,
-      "outwardExtensionLimit": 3000,
       "acceleration": 95,
       "enabled": true,
       "port": "Right"
@@ -86,7 +78,6 @@
       "address": 12,
       "inwardCurrentLimit": 1700,
       "outwardCurrentLimit": 1700,
-      "outwardExtensionLimit": 3000,
       "acceleration": 95,
       "enabled": true,
       "port": "Right"
@@ -96,7 +87,6 @@
       "address": 13,
       "inwardCurrentLimit": 1700,
       "outwardCurrentLimit": 1700,
-      "outwardExtensionLimit": 3000,
       "acceleration": 95,
       "enabled": true,
       "port": "Left"
@@ -106,7 +96,6 @@
       "address": 14,
       "inwardCurrentLimit": 1700,
       "outwardCurrentLimit": 1700,
-      "outwardExtensionLimit": 3000,
       "acceleration": 95,
       "enabled": true,
       "port": "Left"
@@ -116,7 +105,6 @@
       "address": 15,
       "inwardCurrentLimit": 1700,
       "outwardCurrentLimit": 1700,
-      "outwardExtensionLimit": 3000,
       "acceleration": 95,
       "enabled": true,
       "port": "Left"
@@ -126,7 +114,6 @@
       "address": 16,
       "inwardCurrentLimit": 1700,
       "outwardCurrentLimit": 1700,
-      "outwardExtensionLimit": 3000,
       "acceleration": 95,
       "enabled": true,
       "port": "Left"
@@ -136,7 +123,6 @@
       "address": 17,
       "inwardCurrentLimit": 1700,
       "outwardCurrentLimit": 1700,
-      "outwardExtensionLimit": 3000,
       "acceleration": 95,
       "enabled": true,
       "port": "Left"
@@ -146,7 +132,6 @@
       "address": 18,
       "inwardCurrentLimit": 1700,
       "outwardCurrentLimit": 1700,
-      "outwardExtensionLimit": 3000,
       "acceleration": 95,
       "enabled": true,
       "port": "Left"
@@ -156,7 +141,6 @@
       "address": 19,
       "inwardCurrentLimit": 1700,
       "outwardCurrentLimit": 1700,
-      "outwardExtensionLimit": 3000,
       "acceleration": 95,
       "enabled": true,
       "port": "Left"
@@ -166,7 +150,6 @@
       "address": 20,
       "inwardCurrentLimit": 1700,
       "outwardCurrentLimit": 1700,
-      "outwardExtensionLimit": 3000,
       "acceleration": 95,
       "enabled": true,
       "port": "Left"
@@ -176,7 +159,6 @@
       "address": 21,
       "inwardCurrentLimit": 1700,
       "outwardCurrentLimit": 1700,
-      "outwardExtensionLimit": 3000,
       "acceleration": 95,
       "enabled": true,
       "port": "Left"
@@ -186,7 +168,6 @@
       "address": 25,
       "inwardCurrentLimit": 1700,
       "outwardCurrentLimit": 1700,
-      "outwardExtensionLimit": 3000,
       "acceleration": 95,
       "enabled": true,
       "port": "Right"
@@ -196,7 +177,8 @@
       "address": 26,
       "inwardCurrentLimit": 1700,
       "outwardCurrentLimit": 1700,
-      "outwardExtensionLimit": 3000,
+      "outwardExtensionLimit": 1500,
+      "positionEncoderScaling": 16,
       "acceleration": 95,
       "enabled": true,
       "port": "Right"
@@ -206,7 +188,6 @@
       "address": 22,
       "inwardCurrentLimit": 1700,
       "outwardCurrentLimit": 1700,
-      "outwardExtensionLimit": 3000,
       "acceleration": 95,
       "enabled": true,
       "port": "Left"
@@ -216,7 +197,8 @@
       "address": 23,
       "inwardCurrentLimit": 1700,
       "outwardCurrentLimit": 1700,
-      "outwardExtensionLimit": 3000,
+      "outwardExtensionLimit": 1500,
+      "positionEncoderScaling": 16,
       "acceleration": 95,
       "enabled": true,
       "port": "Left"
@@ -226,7 +208,8 @@
       "address": 27,
       "inwardCurrentLimit": 1700,
       "outwardCurrentLimit": 1700,
-      "outwardExtensionLimit": 3000,
+      "outwardExtensionLimit": 1500,
+      "positionEncoderScaling": 16,
       "acceleration": 95,
       "enabled": true,
       "port": "Right"
@@ -236,7 +219,6 @@
       "address": 28,
       "inwardCurrentLimit": 1700,
       "outwardCurrentLimit": 1700,
-      "outwardExtensionLimit": 3000,
       "acceleration": 95,
       "enabled": true,
       "port": "Left"
@@ -246,7 +228,6 @@
       "address": 29,
       "inwardCurrentLimit": 1700,
       "outwardCurrentLimit": 1700,
-      "outwardExtensionLimit": 3000,
       "acceleration": 95,
       "enabled": true,
       "port": "Left"
