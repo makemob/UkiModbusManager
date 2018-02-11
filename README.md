@@ -1,5 +1,6 @@
 # UkiModbusManager
 Adapter to manage modbus comms to Uki, converts between UDP and modbus messages
+Includes 'player piano': sends commands stored in CSV script to control speed/accel/position timeline
 
 See also http://github.com/makemob/Huhu
 
