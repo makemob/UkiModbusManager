@@ -42,8 +42,9 @@ from ModbusMap import MB_MAP
 ##### Defines #####
 LOG_LEVEL = logging.INFO
 
-IP_ADDRESS = "127.0.0.1"
+INPUT_IP_ADDRESS = "127.0.0.1"
 INPUT_UDP_PORT = 9000
+DEFAULT_OUTPUT_IP_ADDRESS = "127.0.0.1"
 OUTPUT_UDP_PORT = 10001
 
 BAUD_RATE = 19200
@@ -74,6 +75,7 @@ MAX_MOTOR_SPEED = 60  # max allowable motor speed %
 
 HEARTBEAT_ADDRESS = 240   # black hole address to send heartbeats, if not wanting to send any command to a board
 
+ENABLE_TIMEOUT_CONFIG = False   # set to true only if we need to adjust heartbeat/encoder fail timeouts on the fly
 
 class UkiModbus:
 
@@ -154,13 +156,14 @@ class UkiModbus:
 
 
 class UkiModbusManager:
-    def __init__(self, left_serial_port, right_serial_port, config_filename, logger=None,
-                 incoming_queue=None, outgoing_queue=None):
+    def __init__(self, left_serial_port, right_serial_port, config_filename, output_ip=DEFAULT_OUTPUT_IP_ADDRESS,
+                 logger = None, incoming_queue=None, outgoing_queue=None):
 
         self.output_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)  # Internet, UDP
+        self.output_ip = output_ip
 
         self.input_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)  # Internet, UDP
-        self.input_socket.bind((IP_ADDRESS, INPUT_UDP_PORT))
+        self.input_socket.bind((INPUT_IP_ADDRESS, INPUT_UDP_PORT))
         self.input_socket.setblocking(False)
 
         self.incoming_queue = incoming_queue  # Optional queue to directly send commands to wrapper (rather than UDP)
@@ -259,7 +262,7 @@ class UkiModbusManager:
         byte_packet = [entry.to_bytes(2, byteorder='little') for entry in packet]
         #self.logger.info(len(packet))
         # Flatten to byte string, ship out
-        self.output_socket.sendto(b"".join(byte_packet), (IP_ADDRESS, OUTPUT_UDP_PORT))
+        self.output_socket.sendto(b"".join(byte_packet), (self.output_ip, OUTPUT_UDP_PORT))
 
         # Send to output queue if it exists
         if self.outgoing_queue is not None:
@@ -277,6 +280,22 @@ class UkiModbusManager:
         for reset_address in self.enabled_boards:
             self.get_port_for_address(reset_address).write_queue[reset_address].append((MB_MAP['MB_RESET_ESTOP'], 0x5050))
         self.heartbeat_armed = False  # Heartbeat will be reenabled when next message arrives
+
+    def force_calibrate(self):
+        """Force selected boards to calibrate encoder to zero in current position"""
+        # Locate boards that require force calibration
+        must_force_boards = []
+        for actuator in self.board_config['actuators']:
+            try:
+                if actuator['mustForceCalibrate']:
+                    must_force_boards.append(actuator['address'])
+            except KeyError:
+                pass
+
+        self.logger.info("Forcing encoder calibration on boards " + str(must_force_boards))
+        if must_force_boards:
+            for force_address in must_force_boards:
+                self.get_port_for_address(force_address).write_queue[force_address].append((MB_MAP['MB_FORCE_CALIBRATE_ENCODER'], 0xA0A0))
 
     def sanity_check_command(self, write_offset, write_value):
         """Test a command before it is sent out in case it could prove hazardous"""
@@ -410,7 +429,7 @@ class UkiModbusManager:
                         output_packet = [entry.to_bytes(2, byteorder='little') for entry in output_packet]
 
                         # Flatten to byte string, ship out
-                        self.output_socket.sendto(b"".join(output_packet), (IP_ADDRESS, OUTPUT_UDP_PORT))
+                        self.output_socket.sendto(b"".join(output_packet), (self.output_ip, OUTPUT_UDP_PORT))
 
         self.uki_ports['left'].clear_write_queue()
         self.uki_ports['right'].clear_write_queue()
@@ -457,12 +476,15 @@ class UkiModbusManager:
         # Update regs as needed
         self.check_and_write_config_reg(address, MB_MAP['MB_CURRENT_LIMIT_INWARD'], board_config, 'inwardCurrentLimit')
         self.check_and_write_config_reg(address, MB_MAP['MB_CURRENT_LIMIT_OUTWARD'], board_config, 'outwardCurrentLimit')
-        # Cannot set inward current limit as signed value not converted properly..  Don't need this for now
+        # Cannot set inward extension limit as signed value not converted properly..  Don't need this for now
         # self.check_and_write_config_reg(address, MB_MAP['MB_EXTENSION_LIMIT_INWARD'], board_config, 'inwardExtensionLimit')
         self.check_and_write_config_reg(address, MB_MAP['MB_EXTENSION_LIMIT_OUTWARD'], board_config, 'outwardExtensionLimit')
         self.check_and_write_config_reg(address, MB_MAP['MB_POSITION_ENCODER_SCALING'], board_config, 'positionEncoderScaling')
         if self.honour_accel_config:
             self.check_and_write_config_reg(address, MB_MAP['MB_MOTOR_ACCEL'], board_config, 'acceleration')
+        if ENABLE_TIMEOUT_CONFIG:
+            self.check_and_write_config_reg(address, MB_MAP['MB_HEARTBEAT_TIMEOUT'], board_config, 'heartbeatTimeout')
+            self.check_and_write_config_reg(address, MB_MAP['MB_ENCODER_FAIL_TIMEOUT'], board_config, 'encoderFailTimeout')
 
     def main_poll_loop(self):
         """
@@ -507,7 +529,9 @@ class UkiModbusManager:
             self.logger.debug("Full read " + str(address))
             self.query_and_forward(address, MB_MAP['MB_BRIDGE_CURRENT'], MB_MAP['MB_BOARD_TEMPERATURE'])
             self.query_and_forward(address, MB_MAP['MB_MOTOR_SETPOINT'], MB_MAP['MB_POSITION_ENCODER_SCALING'])
-            self.query_and_forward(address, MB_MAP['MB_INWARD_ENDSTOP_COUNT'], MB_MAP['MB_EXTENSION_TRIPS_OUTWARD'])
+            self.query_and_forward(address, MB_MAP['MB_INWARD_ENDSTOP_COUNT'], MB_MAP['MB_ENCODER_FAIL_TRIPS'])
+            if ENABLE_TIMEOUT_CONFIG:
+                self.query_and_forward(address, MB_MAP['MB_HEARTBEAT_TIMEOUT'], MB_MAP['MB_ENCODER_FAIL_TIMEOUT'])
             self.update_board_config(address)
 
         # Write out commands in queue

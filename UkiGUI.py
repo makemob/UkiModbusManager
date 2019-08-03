@@ -16,12 +16,15 @@ import tkinter.scrolledtext as tkst
 import os
 import glob
 import queue
+import ipaddress
 
 DEFAULT_CONFIG_FILE = 'UkiConfig.json'
 #DEFAULT_CONFIG_FILE = 'BenchtestConfig.json'
 DEFAULT_LEFT_COMM_PORT = 'COM5' # None
 #DEFAULT_LEFT_COMM_PORT = '/dev/tty.usbserial-A101OCIF'
 DEFAULT_RIGHT_COMM_PORT = 'COM4' # None
+
+DEFAULT_OUTPUT_IP_ADDRESS = "127.0.0.1"
 
 DEFAULT_LOG_LEVEL = 'INFO'
 
@@ -80,8 +83,8 @@ class UkiGUI:
         self.left_comm_disabled = IntVar()
         self.left_comm_disable_button = Checkbutton(master, text='Disable', padx=5, variable=self.left_comm_disabled)
         self.left_comm_disable_button.grid(row=row_num, column=3, sticky='W')
-        self.restart_button = Button(master, text='Restart Wrapper', command=self.trigger_restart)
-        self.restart_button.grid(row=row_num, column=4, rowspan=3)
+        self.force_calibrate_button = Button(master, text='Force Calibrate', command=self.trigger_force_calibrate)
+        self.force_calibrate_button.grid(row=row_num, column=4)
         row_num += 1
         self.right_comm_port = StringVar()
         self.right_comm_port.set(DEFAULT_RIGHT_COMM_PORT)
@@ -92,6 +95,8 @@ class UkiGUI:
         self.right_comm_disabled = IntVar()
         self.right_comm_disable_button = Checkbutton(master, text='Disable', padx=5, variable=self.right_comm_disabled)
         self.right_comm_disable_button.grid(row=row_num, column=3, sticky='W')
+        self.restart_button = Button(master, text='Restart Wrapper', command=self.trigger_restart)
+        self.restart_button.grid(row=row_num, column=4)
         row_num += 1
 
         # Config file
@@ -101,6 +106,15 @@ class UkiGUI:
         self.config_file_label.grid(row=row_num, column=0, sticky=W)
         self.config_file_entry = Entry(master, textvariable=self.config_file)
         self.config_file_entry.grid(row=row_num, column=1, columnspan=3, sticky='EW')
+        row_num += 1
+
+        # Output IP address
+        self.output_ip = StringVar()
+        self.output_ip.set(DEFAULT_OUTPUT_IP_ADDRESS)
+        self.output_ip_label = Label(master, text='Output IP address:')
+        self.output_ip_label.grid(row=row_num, column=0, sticky=W)
+        self.output_ip_entry = Entry(master, textvariable=self.output_ip)
+        self.output_ip_entry.grid(row=row_num, column=1, columnspan=3, sticky='EW')
         row_num += 1
 
         # Set script directory
@@ -175,16 +189,20 @@ class UkiGUI:
             piano_loops = self.piano_loops.get()
         except TclError:
             piano_loops = DEFAULT_PIANO_LOOPS
+
         try:
             piano_rate = self.piano_rate.get()
         except TclError:
             piano_rate = DEFAULT_PIANO_RATE
+
         script_file = self.files_listbox.get(self.files_listbox.curselection()) if self.files_listbox.curselection() else ""
+
         cfg = {'left_comm_port': self.left_comm_port.get(),
                'left_comm_disabled': self.left_comm_disabled.get(),
                'right_comm_port': self.right_comm_port.get(),
                'right_comm_disabled': self.right_comm_disabled.get(),
                'config_file': self.config_file.get(),
+               'output_ip': self.output_ip.get(),
                'script_file': script_file, #self.files_listbox.get(self.files_listbox.curselection()),
                'script_loops': piano_loops,
                'script_rate': piano_rate,
@@ -210,7 +228,16 @@ class UkiGUI:
         self.add_to_gui_queue('RESET')
 
     def trigger_restart(self):
+        # Validate IP only when user clicks restart
+        try:
+            ipaddress.ip_address(self.output_ip.get())
+        except ValueError:
+            self.output_ip.set(DEFAULT_OUTPUT_IP_ADDRESS)
+
         self.add_to_gui_queue('RESTART')
+
+    def trigger_force_calibrate(self):
+        self.add_to_gui_queue('FORCE_CALIBRATE')
 
     def input_changed(self):
         self.add_to_gui_queue(self.input_source.get())

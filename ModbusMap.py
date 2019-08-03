@@ -30,6 +30,7 @@ MB_MAP = {
 
 	'MB_GOTO_POSITION': 218,
 	'MB_GOTO_SPEED_SETPOINT': 219,
+	'MB_FORCE_CALIBRATE_ENCODER': 220,  # write 0xA0A0 to force encoder to calibrate to zero in current position
 
 	'MB_EXTENSION': 299,
     'MB_ESTOP_STATE': 300,
@@ -43,10 +44,12 @@ MB_MAP = {
     'MB_HEARTBEAT_EXPIRIES' : 308,
 	'MB_EXTENSION_TRIPS_INWARD': 309,
 	'MB_EXTENSION_TRIPS_OUTWARD': 310,
+	'MB_ENCODER_FAIL_TRIPS': 311,
 
     'MB_HEARTBEAT_TIMEOUT' : 9008,  # seconds until heartbeat timer trips
+	'MB_ENCODER_FAIL_TIMEOUT': 9009,  # Max milliseconds between encoder pulses before timeout
 
-    'MAX_MODBUS_OFFSET' : 9009
+    'MAX_MODBUS_OFFSET' : 9010
 }
 
 MB_MAP_HUHU_VERSION = 0.5  # Matching Huhu firmware version

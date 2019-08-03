@@ -168,6 +168,7 @@
       "address": 25,
       "inwardCurrentLimit": 1700,
       "outwardCurrentLimit": 1700,
+      "mustForceCalibrate": true,
       "acceleration": 95,
       "enabled": true,
       "port": "Right"
@@ -178,7 +179,6 @@
       "inwardCurrentLimit": 1700,
       "outwardCurrentLimit": 1700,
       "outwardExtensionLimit": 1500,
-      "positionEncoderScaling": 16,
       "acceleration": 95,
       "enabled": true,
       "port": "Right"
@@ -188,6 +188,7 @@
       "address": 22,
       "inwardCurrentLimit": 1700,
       "outwardCurrentLimit": 1700,
+      "mustForceCalibrate": true,
       "acceleration": 95,
       "enabled": true,
       "port": "Left"
@@ -198,7 +199,6 @@
       "inwardCurrentLimit": 1700,
       "outwardCurrentLimit": 1700,
       "outwardExtensionLimit": 1500,
-      "positionEncoderScaling": 16,
       "acceleration": 95,
       "enabled": true,
       "port": "Left"
@@ -209,7 +209,6 @@
       "inwardCurrentLimit": 1700,
       "outwardCurrentLimit": 1700,
       "outwardExtensionLimit": 1500,
-      "positionEncoderScaling": 16,
       "acceleration": 95,
       "enabled": true,
       "port": "Right"
@@ -219,6 +218,7 @@
       "address": 28,
       "inwardCurrentLimit": 1700,
       "outwardCurrentLimit": 1700,
+      "positionEncoderScaling": 0,
       "acceleration": 95,
       "enabled": true,
       "port": "Left"
@@ -228,6 +228,7 @@
       "address": 29,
       "inwardCurrentLimit": 1700,
       "outwardCurrentLimit": 1700,
+      "positionEncoderScaling": 0,
       "acceleration": 95,
       "enabled": true,
       "port": "Left"

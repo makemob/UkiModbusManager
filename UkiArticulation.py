@@ -75,6 +75,7 @@ class ThreadManager:
 
         return uki.UkiModbusManager(left_serial_port=left_port, right_serial_port=right_port,
                                     config_filename=config['config_file'],
+                                    output_ip=config['output_ip'],
                                     logger=self.logger,
                                     incoming_queue=self.uki_mm_comms_queue,
                                     outgoing_queue=self.uki_mm_responses_queue)
@@ -132,6 +133,8 @@ class ThreadManager:
                         uki_manager.reset_all_boards()
                     elif msg == 'PLAY':
                         self.playing = True
+                    elif msg == 'FORCE_CALIBRATE':
+                        uki_manager.force_calibrate()
 
                 except queue.Empty:
                     pass

@@ -2,13 +2,14 @@
   "version": 1,
   "actuators": [
     {
-      "name": "TestBox",
-      "address": 24,
-      "inwardCurrentLimit": 1000,
-      "outwardCurrentLimit": 1000,
+      "name": "RightWingRaise",
+      "address": 6,
+      "inwardCurrentLimit": 3000,
+      "outwardCurrentLimit": 3000,
       "outwardExtensionLimit": 3000,
       "acceleration": 91,
       "enabled": true,
+      "mustForceCalibrate": true,
       "port": "Left"
     },
     {
@@ -18,6 +19,7 @@
       "outwardCurrentLimit": 1000,
       "acceleration": 100,
       "enabled": false,
+      "positionEncoderScaling": 0,
       "port": "Right"
     }
   ]
