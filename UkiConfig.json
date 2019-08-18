@@ -181,7 +181,8 @@
       "outwardExtensionLimit": 1350,
       "acceleration": 95,
       "enabled": true,
-      "port": "Right"
+      "port": "Right",
+      "encoderFailTimeout": 10000
     },
     {
       "name": "LeftWingRotate",
@@ -201,7 +202,8 @@
       "outwardExtensionLimit": 1350,
       "acceleration": 95,
       "enabled": true,
-      "port": "Left"
+      "port": "Left",
+      "encoderFailTimeout": 10000
     },
     {
       "name": "Arse",

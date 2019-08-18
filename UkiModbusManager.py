@@ -75,7 +75,7 @@ MAX_MOTOR_SPEED = 60  # max allowable motor speed %
 
 HEARTBEAT_ADDRESS = 240   # black hole address to send heartbeats, if not wanting to send any command to a board
 
-ENABLE_TIMEOUT_CONFIG = False   # set to true only if we need to adjust heartbeat/encoder fail timeouts on the fly
+ENABLE_TIMEOUT_CONFIG = True   # set to true only if we need to adjust heartbeat/encoder fail timeouts on the fly
 
 class UkiModbus:
 
